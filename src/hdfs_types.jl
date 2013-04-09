@@ -4,12 +4,14 @@ const HDFS_OBJ_FILE = 'F'
 const HDFS_OBJ_DIR = 'D'
 const HDFS_OBJ_INVALID = ' '
 
-const O_WRONLY = 1
-const O_RDONLY = 0
-const O_APPEND = 8
+# the following may not be entirely true. some 32 bits systems may have 64 bit time_t
+if(64 == Base.WORD_SIZE)
+    typealias TimeT Int64
+else
+    typealias TimeT Int32
+end
 
-## used to enforce typing ##
-
+## used to enforce types ##
 type HdfsFS
     ptr::Ptr{Void}
     function HdfsFS(pt::Ptr{Void})
@@ -28,14 +30,14 @@ end
 immutable c_hdfsfileinfo
     mKind::Cint             # file or directory. hoping the enum is int type (it is actually compiler dependent)
     mName::Ptr{Uint8}       # file name
-    mLastMod::Int64         # the last modification time for the file in seconds. hoping time_t is 64 bits
+    mLastMod::TimeT         # the last modification time for the file in seconds
     mSize::Int64            # the size of the file in bytes
     mReplication::Cshort    # the count of replicas
     mBlockSize::Int64       # the block size for the file
     mOwner::Ptr{Uint8}      # the owner of the file
     mGroup::Ptr{Uint8}      # the group associated with the file
     mPermissions::Cshort    # permissions associated with the file
-    mLastAccess::Int64      # the last access time for the file in seconds. hoping time_t is 64 bits
+    mLastAccess::TimeT      # the last access time for the file in seconds
 end
 
 type HdfsFileInfo
@@ -54,8 +56,8 @@ type HdfsFileInfo
     function HdfsFileInfo(pt::Ptr{c_hdfsfileinfo})
         if(C_NULL != pt)
             cfi::c_hdfsfileinfo = unsafe_ref(pt)
-            fi = new(pt, cfi.mKind, bytestring(cfi.mName), cfi.mLastMod, cfi.mSize, cfi.mReplication, cfi.mBlockSize, 
-                        bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, cfi.mLastAccess)
+            fi = new(pt, cfi.mKind, bytestring(cfi.mName), int64(cfi.mLastMod), cfi.mSize, cfi.mReplication, cfi.mBlockSize, 
+                        bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, int64(cfi.mLastAccess))
             finalizer(fi, finalize_file_info)
         else
             fi = new(C_NULL, HDFS_OBJ_INVALID, "", 0, 0, 0, 0, "", "", 0, 0)
@@ -64,8 +66,8 @@ type HdfsFileInfo
     end
 
     function HdfsFileInfo(cfi::c_hdfsfileinfo)
-        new(C_NULL, cfi.mKind, bytestring(cfi.mName), cfi.mLastMod, cfi.mSize, cfi.mReplication, cfi.mBlockSize,
-                        bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, cfi.mLastAccess)
+        new(C_NULL, cfi.mKind, bytestring(cfi.mName), int64(cfi.mLastMod), cfi.mSize, cfi.mReplication, cfi.mBlockSize,
+                        bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, int64(cfi.mLastAccess))
     end
 end
 

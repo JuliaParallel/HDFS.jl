@@ -9,8 +9,7 @@ export  hdfs_connect, hdfs_connect_as_user,
         hdfs_pread, hdfs_read, hdfs_seek, hdfs_tell, hdfs_write,
         hdfs_set_replication,
         hdfs_get_hosts,
-        HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
-        O_RDONLY, O_WRONLY, O_APPEND
+        HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID
 
 include("hdfs_types.jl")
 
@@ -28,9 +27,9 @@ function hdfs_open_file(fs::HdfsFS, path::String, flags::Integer, buffer_sz::Int
   file = ccall((:hdfsOpenFile, _libhdfs), Ptr{Void}, (Ptr{Void}, Ptr{Uint8}, Int32, Int32, Int16, Int32), fs.ptr, bytestring(path), int32(flags), int32(buffer_sz), int16(replication), int32(block_sz))
   return HdfsFile(file)
 end
-hdfs_open_file_read(fs::HdfsFS, path::String) = hdfs_open_file(fs, path, O_RDONLY)
-hdfs_open_file_write(fs::HdfsFS, path::String) = hdfs_open_file(fs, path, O_WRONLY)
-hdfs_open_file_append(fs::HdfsFS, path::String) = hdfs_open_file(fs, path, O_WRONLYi | O_APPEND)
+hdfs_open_file_read(fs::HdfsFS, path::String) = hdfs_open_file(fs, path, Base.JL_O_RDONLY)
+hdfs_open_file_write(fs::HdfsFS, path::String) = hdfs_open_file(fs, path, Base.JL_O_WRONLY)
+hdfs_open_file_append(fs::HdfsFS, path::String) = hdfs_open_file(fs, path, Base.JL_O_WRONLY | Base.JL_O_APPEND)
 
 hdfs_close_file(fs::HdfsFS, file::HdfsFile) = ccall((:hdfsCloseFile, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}), fs.ptr, file.ptr)
 
@@ -38,7 +37,7 @@ hdfs_exists(fs::HdfsFS, path::String) = ccall((:hdfsExists, _libhdfs), Int32, (P
 
 hdfs_seek(fs::HdfsFS, file::HdfsFile, desired_pos) = ccall((:hdfsSeek, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64), fs.ptr, file.ptr, desired_pos)
 
-hdfs_tell(fs::HdfsFS, file::HdfsFile)=ccall((:hdfsTell, _libhdfs),Int64,(Ptr{Void},Ptr{Void}), fs.ptr, file.ptr)
+hdfs_tell(fs::HdfsFS, file::HdfsFile) = ccall((:hdfsTell, _libhdfs), Int64, (Ptr{Void}, Ptr{Void}), fs.ptr, file.ptr)
 
 hdfs_read(fs::HdfsFS, file::HdfsFile, buff::Ptr{Void}, len::Integer) = ccall((:hdfsRead, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), fs.ptr, file.ptr, buff, int32(len))
 function hdfs_read(fs::HdfsFS, file::HdfsFile, len::Integer)
@@ -146,8 +145,7 @@ hdfs_chown(fs::HdfsFS, path::String, owner::String, group::String) = ccall((:hdf
 
 hdfs_chmod(fs::HdfsFS, path::String, mode::Int16) = ccall((:hdfsChmod, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Int16), fs.ptr, bytestring(path), mode)
 
-# hoping time_t is 64 bits
-hdfs_utime(fs::HdfsFS, path::String, mtime::Integer, atime::Integer) = ccall((:hdfsUtime, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, path, int64(mtime), int64(atime))
+hdfs_utime(fs::HdfsFS, path::String, mtime::Integer, atime::Integer) = ccall((:hdfsUtime, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, TimeT, TimeT), fs.ptr, path, convert(TimeT, mtime), convert(TimeT, atime))
 
 end
 
