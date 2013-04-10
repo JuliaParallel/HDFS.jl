@@ -77,7 +77,7 @@ type HdfsFileInfoList
 
     function HdfsFileInfoList(pt::Ptr{c_hdfsfileinfo}, len::Int32)
         if(C_NULL != pt)
-            local carr::Array{c_hdfsfileinfo,1} = pointer_to_array(pt, (int64(len),))
+            local carr::Array{c_hdfsfileinfo,1} = pointer_to_array(pt, (int(len),))
             fiarr = [HdfsFileInfo(x) for x in carr]
             fi = new(pt, fiarr)
             finalizer(fi, finalize_file_info_list)
