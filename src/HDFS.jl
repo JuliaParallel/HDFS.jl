@@ -10,7 +10,8 @@ export  hdfs_connect, hdfs_connect_as_user,
         hdfs_pread, hdfs_read, hdfs_seek, hdfs_tell, hdfs_write,
         hdfs_set_replication,
         hdfs_get_hosts,
-        HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID
+        HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
+        HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList
 
 include("hdfs_types.jl")
 
