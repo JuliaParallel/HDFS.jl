@@ -18,7 +18,6 @@ finalize_file_info_list(fi::HdfsFileInfoList) = ccall((:hdfsFreeFileInfo, _libhd
 finalize_file_info(fi::HdfsFileInfo) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, 1)
 finalize_hdfs_fs(fs::HdfsFS) = ccall((:hdfsDisconnect, _libhdfs), Int32, (Ptr{Void},),fs.ptr)
 
-
 hdfs_connect_as_user(host::String, port::Integer, user::String) = HdfsFS(ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32, Ptr{Uint8}), bytestring(host), int32(port), bytestring(user)))
 hdfs_connect(host::String="default", port::Integer=0) = HdfsFS(ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32), bytestring(host), int32(port)))
 
@@ -75,9 +74,9 @@ hdfs_move(srcFS::HdfsFS, src::String, dstFS::HdfsFS, dst::String) = ccall((:hdfs
 
 hdfs_delete(fs::HdfsFS, path::String) = ccall((:hdfsDelete, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
 
-hdfs_rename(fs::HdfsFS, old_path, new_path::String) = ccall((:hdfsRename, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Uint8}), fs.ptr, bytestring(old_path), bytestring(new_path))
+hdfs_rename(fs::HdfsFS, old_path::String, new_path::String) = ccall((:hdfsRename, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Uint8}), fs.ptr, bytestring(old_path), bytestring(new_path))
 
-hdfs_get_working_directory(fs::HdfsFS, buff::Ptr{Uint8}, buff_sz::Integer)=ccall((:hdfsGetWorkingDirectory, _libhdfs), Ptr{Uint8}, (Ptr{Void}, Ptr{Uint8}, Int32), fs.ptr, buff, int32(buff_sz))
+hdfs_get_working_directory(fs::HdfsFS, buff::Ptr{Uint8}, buff_sz::Integer) = ccall((:hdfsGetWorkingDirectory, _libhdfs), Ptr{Uint8}, (Ptr{Void}, Ptr{Uint8}, Int32), fs.ptr, buff, int32(buff_sz))
 function hdfs_get_working_directory(fs::HdfsFS, buff_sz::Integer)
     buff = Array(Uint8, buff_sz)
     path = hdfs_get_working_directory(fs, buff, buff_sz)
