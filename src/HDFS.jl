@@ -11,13 +11,15 @@ export  hdfs_connect, hdfs_connect_as_user,
         hdfs_set_replication,
         hdfs_get_hosts,
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
-        HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList
+        HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
+        HdfsJobCtx, finalize_hdfs_job_ctx, hdfs_job_do_serial, hdfs_job_do_parallel, hdfs_do_job_block_id
 
 include("hdfs_types.jl")
+include("hdfs_jobs.jl")
 
 finalize_file_info_list(fi::HdfsFileInfoList) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, length(fi.arr))
 finalize_file_info(fi::HdfsFileInfo) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, 1)
-finalize_hdfs_fs(fs::HdfsFS) = ccall((:hdfsDisconnect, _libhdfs), Int32, (Ptr{Void},),fs.ptr)
+finalize_hdfs_fs(fs::HdfsFS) = (C_NULL != fs.ptr) && ccall((:hdfsDisconnect, _libhdfs), Int32, (Ptr{Void},), fs.ptr) && (fs.ptr = C_NULL)
 
 hdfs_connect_as_user(host::String, port::Integer, user::String) = HdfsFS(ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32, Ptr{Uint8}), bytestring(host), int32(port), bytestring(user)))
 hdfs_connect(host::String="default", port::Integer=0) = HdfsFS(ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32), bytestring(host), int32(port)))
@@ -51,7 +53,7 @@ function hdfs_read(fs::HdfsFS, file::HdfsFile, len::Integer)
 end
 
 hdfs_pread(fs::HdfsFS, file::HdfsFile, position::Int64, buff::Ptr{Void}, len::Integer) = ccall((:hdfsPread, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64, Ptr{Void}, Int32), fs.ptr, file.ptr, position, buff, len)
-function hdfs_pread(fs::HdfsFS, file::HdfsFile, position, len)
+function hdfs_pread(fs::HdfsFS, file::HdfsFile, position::Int64, len::Integer)
     local buff = Array(Uint8, len) 
     if(-1 == (r = hdfs_pread(fs, file, position, buff, len)))
         error("error reading file: -1")
