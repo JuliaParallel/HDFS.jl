@@ -19,7 +19,12 @@ include("hdfs_jobs.jl")
 
 finalize_file_info_list(fi::HdfsFileInfoList) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, length(fi.arr))
 finalize_file_info(fi::HdfsFileInfo) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, 1)
-finalize_hdfs_fs(fs::HdfsFS) = (C_NULL != fs.ptr) && ccall((:hdfsDisconnect, _libhdfs), Int32, (Ptr{Void},), fs.ptr) && (fs.ptr = C_NULL)
+function finalize_hdfs_fs(fs::HdfsFS) 
+    if(C_NULL != fs.ptr) 
+        ccall((:hdfsDisconnect, _libhdfs), Int32, (Ptr{Void},), fs.ptr) 
+        fs.ptr = C_NULL
+    end
+end
 
 hdfs_connect_as_user(host::String, port::Integer, user::String) = HdfsFS(ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32, Ptr{Uint8}), bytestring(host), int32(port), bytestring(user)))
 hdfs_connect(host::String="default", port::Integer=0) = HdfsFS(ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32), bytestring(host), int32(port)))
