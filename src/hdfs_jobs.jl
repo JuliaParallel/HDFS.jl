@@ -12,6 +12,13 @@
 # 6. destroy_job_ctx()
 
 
+# TODO:
+# - distribute file to be loaded to all machines
+# - multiple workers per node
+# - better block distribution
+# - support reduction step?
+# - resilience and restartability against node failure
+
 # job context stores HDFS context required for the job
 type HdfsJobCtx
     fs::HdfsFS
@@ -80,6 +87,7 @@ function setup_queue(jc::HdfsJobCtx, machines::Array{ASCIIString,1}, ips::Array{
     local nnodes = length(machines)+1 # +1 for the namenode, which holds unclaimed blocks to be picked up by any node that finishes early
     local blkids::Array{Array{Int,1},1} = [ Array(Int, 0) for i in 1:nnodes ]
 
+    println("total $(length(jc.fblk_hosts)) blocks to process...")
     for blk_id in 1:length(jc.fblk_hosts)
         push!(blkids[find_wrkr_id(jc.fblk_hosts[blk_id][1], machines, hns, ips)], blk_id)
     end
@@ -94,6 +102,7 @@ end
 
 function process_queue(jqarr::Array{HdfsJobQueue,1})
     @sync begin
+        local num_done::Int = 0
         for jq in jqarr
             @async begin
                 while((length(jq.block_ids) + length(jqarr[1].block_ids)) > 0)
@@ -107,7 +116,10 @@ function process_queue(jqarr::Array{HdfsJobQueue,1})
                     remotecall_wait(jq.proc_id, hdfs_do_job_block_id, blk_to_proc)
                     ret = remotecall_fetch(jq.proc_id, Main.gather_results)
                     push!(jq.results, (blk_to_proc, ret))
+                    num_done += 1
+                    println("blocks completed $(num_done)")
                 end
+                println("worker node $(jq.proc_id) completed")
             end
         end
     end
@@ -169,7 +181,7 @@ end
 
 
 function process_block(buff::Array{Uint8,1}, len::Int64)
-    println("processing block of len $len")
+    #println("processing block of len $len")
 
     local start_pos::Int64 = 1
     local end_pos::Int64 = 0

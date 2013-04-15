@@ -35,18 +35,31 @@ function gather_results()
     sd_ret
 end
 
+beginswithat(a::Array{Uint8,1}, pos::Int,  b::Array{Uint8,1}) = ((length(a)-pos+1) >= length(b) && ccall(:strncmp, Int32, (Ptr{Uint8}, Ptr{Uint8}, Uint), pointer(a)+pos-1, b, length(b)) == 0)
+
+
+const smil = convert(Array{Uint8,1}, "smiley")
 function find_record(buff::Array{Uint8,1}, start_pos::Int64, len::Int64)
-    local end_pos::Int = search(buff, '\n', convert(Int, start_pos))-1
-    (start_pos+len-1 < end_pos) && (end_pos = start_pos+len-1)
-    (0 >= end_pos) && (end_pos = len)
-    rec = ascii(buff[start_pos:end_pos])
-    cols = split(rec, "\t")
-    (cols, int64(end_pos)+1)
+    local final_pos::Int64 = start_pos+len-1;
+    local loop_count = 0
+    while(start_pos <= final_pos)
+        loop_count += 1
+        local end_pos::Int = search(buff, '\n', convert(Int, start_pos))-1
+        (0 >= end_pos) && (end_pos = final_pos)
+        if(beginswithat(buff, start_pos, smil))
+            rec = ascii(buff[start_pos:end_pos])
+            cols = split(rec, "\t")
+            return (cols, int64(end_pos)+1)
+        else 
+            start_pos = int64(end_pos)+2
+        end
+    end
+    ([], final_pos)
 end
 
 
 function process_record(rec)
-    (rec[1] != "smiley") && return
+    (length(rec) == 0) && return
 
     local ts::String = rec[2]
     local ts_year::Int = int(ts[1:4])
