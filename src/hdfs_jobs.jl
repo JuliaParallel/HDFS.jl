@@ -117,7 +117,7 @@ function process_queue(jqarr::Array{HdfsJobQueue,1})
                     ret = remotecall_fetch(jq.proc_id, Main.gather_results)
                     push!(jq.results, (blk_to_proc, ret))
                     num_done += 1
-                    println("blocks completed $(num_done)")
+                    println("block completed at node $(jq.proc_id). total $(num_done)")
                 end
                 println("worker node $(jq.proc_id) completed")
             end
