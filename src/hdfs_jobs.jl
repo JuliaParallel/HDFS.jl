@@ -101,8 +101,8 @@ function setup_queue(jc::HdfsJobCtx, machines::Array{ASCIIString,1}, ips::Array{
 end
 
 function process_queue(jqarr::Array{HdfsJobQueue,1})
+    local num_done::Int = 0
     @sync begin
-        local num_done::Int = 0
         for jq in jqarr
             @async begin
                 while((length(jq.block_ids) + length(jqarr[1].block_ids)) > 0)
