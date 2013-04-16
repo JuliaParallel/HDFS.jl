@@ -1,14 +1,13 @@
 HDFS.jl
 =======
 
-Provides a wrapper over libhdfs and a julia map-reduce functionality built on top of HDFS.
-
-Methods in HDFS.jl can be used for low level functionality, using direct HDFS APIs.
+HDFS.jl provides a wrapper over libhdfs and a julia map-reduce functionality built on top of HDFS. The file libhdfs.jl was originally written by Benjamin Yang (@benyang) and part of the julia/extras. Methods in HDFS.jl can be used for low level functionality, using direct HDFS APIs.
 
 File hdfs\_jobs.jl provides a simple parallel map-reduce functionality. The following are required in order to use it.
 
-Setup:
-------
+
+Map Reduce Setup:
+-----------------
 - Julia must be setup at identical location on all data nodes.
 - Authorized keys setup for ssh from name node machine to all data nodes
 - A job file must be written that defines:
@@ -34,8 +33,8 @@ Setup:
 - The job file must be placed at identical location on all data nodes. (in future a way to do this automatically would be provided)
 
 
-Execution:
-----------
+Map Reduce Execution:
+---------------------
 - **require**("job\_file.jl")<br/>Imports job definition.
 - **hdfs\_job\_do\_parallel**(["datanode1", "datanode2",…], "job\_file.jl")<br/>This would bring up remote julia instances on all data nodes, schedule processing of data blocks on nodes that preferably have the data block locally.
 
@@ -50,6 +49,8 @@ A few sample test scrips are provided in the test folder. The test scripts curre
 
 TODO:
 -----
+- Handle records spanning across block boundaries
+- Better scheduling of blocks across processing nodes
 - Distributed reduction step
 - Scalability improvements, e.g. multiple tasks per node, rack awareness
 - Ability to work on multiple small files, instead of one large file spanning blocks
@@ -57,4 +58,5 @@ TODO:
 - Multi step map-reduce in memory
 - API usability (convenience julia macros/methods to make working with HDFS intuitive)
 - Integrate other distributed storage systems: MapR, Cassandra, MongoDB etc
+
 
