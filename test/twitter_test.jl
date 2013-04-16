@@ -38,7 +38,7 @@ end
 beginswithat(a::Array{Uint8,1}, pos::Integer,  b::Array{Uint8,1}) = ((length(a)-pos+1) >= length(b) && ccall(:strncmp, Int32, (Ptr{Uint8}, Ptr{Uint8}, Uint), pointer(a)+pos-1, b, length(b)) == 0)
 
 
-const smil = convert(Array{Uint8,1}, "smiley")
+const smil::Array{Uint8,1} = convert(Array{Uint8,1}, "smiley")
 function find_record(buff::Array{Uint8,1}, start_pos::Int64, len::Int64)
     local final_pos::Int64 = start_pos+len-1;
     while(start_pos <= final_pos)
@@ -47,7 +47,7 @@ function find_record(buff::Array{Uint8,1}, start_pos::Int64, len::Int64)
         if(beginswithat(buff, start_pos, smil))
             rec = ascii(buff[start_pos:end_pos])
             cols = split(rec, "\t")
-            return (cols, int64(end_pos)+1)
+            return (cols, int64(end_pos)+2)
         else 
             start_pos = int64(end_pos)+2
         end
