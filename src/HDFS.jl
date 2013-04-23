@@ -12,9 +12,13 @@ export  hdfs_connect, hdfs_connect_as_user,
         hdfs_get_hosts,
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
         HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
-        HdfsJobCtx, finalize_hdfs_job_ctx, hdfs_job_do_serial, hdfs_job_do_parallel, hdfs_do_job_block_id
+        HdfsJobCtx, finalize_hdfs_job_ctx, hdfs_job_do_serial, hdfs_job_do_parallel, hdfs_do_job_block_id,
+        HDFS_READER_STATUS_OK, HDFS_READER_STATUS_INCOMPLETE_REC
+
+using VectorUtils
 
 include("hdfs_types.jl")
+include("hdfs_reader.jl")
 include("hdfs_jobs.jl")
 
 finalize_file_info_list(fi::HdfsFileInfoList) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, length(fi.arr))

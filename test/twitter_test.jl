@@ -14,7 +14,7 @@ type SmileyData
 end
 
 function init_job_ctx()
-    global jc = HdfsJobCtx(HDFS_HOST, HDFS_PORT, HDFS_DATA_FILE)
+    global jc = HdfsJobCtx{Vector{String}}(HDFS_HOST, HDFS_PORT, HDFS_DATA_FILE)
     global sd = Dict{String, SmileyData}()
 end
 
@@ -35,39 +35,72 @@ function gather_results()
     sd_ret
 end
 
+
 beginswithat(a::Array{Uint8,1}, pos::Integer,  b::Array{Uint8,1}) = ((length(a)-pos+1) >= length(b) && ccall(:strncmp, Int32, (Ptr{Uint8}, Ptr{Uint8}, Uint), pointer(a)+pos-1, b, length(b)) == 0)
+        
 
+const smil = convert(Array{Uint8,1}, "smiley")
+const REC_SEP = '\n'
+const COL_SEP = "\t"
+const MAX_REC_BYTES = 1024
+ 
+function find_rec(jc::HdfsJobCtx{Vector{String}}, read_beyond::Bool = true)
+    rdr = jc.rdr
+    is_begin = (rdr.begin_blk == 1) # if first block, we should not ignore the first line
+    start_pos = jc.next_rec_pos
+    final_pos = start_pos + length(rdr.cv) - 1
+    end_pos = 0
 
-const smil::Array{Uint8,1} = convert(Array{Uint8,1}, "smiley")
-function find_record(buff::Array{Uint8,1}, start_pos::Int64, len::Int64)
-    local final_pos::Int64 = start_pos+len-1;
-    while(start_pos <= final_pos)
-        local end_pos::Int = search(buff, '\n', convert(Int, start_pos))-1
-        (0 >= end_pos) && (end_pos = final_pos)
-        if(beginswithat(buff, start_pos, smil))
-            rec = ascii(buff[start_pos:end_pos])
-            cols = split(rec, "\t")
-            return (cols, int64(end_pos)+2)
-        else 
-            start_pos = int64(end_pos)+2
+    if(!is_begin)
+        end_pos = search(rdr.cv, REC_SEP, start_pos)
+        if((0 >= end_pos) && !eof(rdr) && read_beyond)
+            read_next(rdr, MAX_REC_BYTES)
+            return find_rec(rdr, false)
+        else
+            start_pos = end_pos
         end
     end
-    ([], final_pos)
+  
+    while(start_pos <= final_pos)
+        end_pos = search(rdr.cv, REC_SEP, start_pos)-1
+        #println("start_pos: $start_pos, final_pos: $final_pos, end_pos: $end_pos, read_beyond: $read_beyond") 
+        if((0 >= end_pos) && !eof(rdr) && read_beyond)
+            read_next(rdr, MAX_REC_BYTES)
+            return find_rec(rdr, false)
+        else
+            # if no rec boundary found, assume all data in buffer is the record.
+            # this is valid only if this is the end of the file.
+            # which should be true if MAX_REC_BYTES is correct.
+            # TODO: put a check and return error if not
+            (0 >= end_pos) && (end_pos = final_pos)
+            # TODO: optimize by implementing beginswithat in ChainedVector
+            recbytes = rdr.cv[start_pos:end_pos]
+            if(beginswithat(recbytes, 1, smil))
+                rec = ascii(recbytes)
+                jc.next_rec_pos = end_pos+2
+                jc.rec = split(rec, COL_SEP)
+                return :ok
+            else
+                start_pos = end_pos+2
+            end
+        end
+    end
+    jc.next_rec_pos = final_pos
+    jc.rec = []
+    :not_ok
 end
 
-
-function process_record(rec)
+function process_rec(rec::Vector{String})
     (length(rec) == 0) && return
 
-    local ts::String = rec[2]
-    local ts_year::Int = int(ts[1:4])
-    local ts_mon::Int = int(ts[5:6])
-    local month_idx::Int = 12*(ts_year-2006) + ts_mon  # twitter begun from 2006
-    local cnt::Int = int(rec[3])
-    local smiley::String = rec[4]
+    ts = rec[2]
+    ts_year = int(ts[1:4])
+    ts_mon = int(ts[5:6])
+    month_idx = 12*(ts_year-2006) + ts_mon  # twitter begun from 2006
+    cnt = int(rec[3])
+    smiley = rec[4]
 
     local smrec::SmileyData
-
     try
         smrec = getindex(sd, smiley)
     catch
