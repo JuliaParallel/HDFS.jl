@@ -38,22 +38,21 @@ end
 
 vec{T}(cv::ChainedVector{T}) = copy!(Array(T, cv.sz), cv)
 
-#function _get_vec_pos{T}(cv::ChainedVector{T}, ind::Integer)
-#    cidx = 1
-#    while(ind > cv.sizes[cidx]); ind -= cv.sizes[cidx]; cidx += 1; end
-#    (cidx, ind)
-#end
+macro _get_vec_pos(cv, ind)
+    quote
+        cidx = 1
+        while($(ind) > $(cv).sizes[cidx]); $(ind) -= $(cv).sizes[cidx]; cidx += 1; end
+        cidx
+    end
+end
 
 function getindex{T}(cv::ChainedVector{T}, ind::Integer)
-    cidx = 1
-    while(ind > cv.sizes[cidx]); ind -= cv.sizes[cidx]; cidx += 1; end
+    cidx = @_get_vec_pos cv ind
     (cv.chain[cidx])[ind]
 end
 
 function setindex!{T}(cv::ChainedVector{T}, x::T, ind::Integer)
-    #cidx, cind = _get_vec_pos(cv, ind)
-    cidx = 1
-    while(ind > cv.sizes[cidx]); ind -= cv.sizes[cidx]; cidx += 1; end
+    cidx = @_get_vec_pos cv ind
     (cv.chain[cidx])[ind] = x
 end
 
@@ -106,4 +105,20 @@ end
 
 search(cv::ChainedVector{Uint8}, b) = search(cv,b,1)
 
+function beginswithat(cv::ChainedVector{Uint8}, pos::Integer, b::Array{Uint8,1}) 
+    lb = length(b) 
+    (length(cv) < (pos+lb-1)) && return 0
+
+    # get the vector that contains pos
+    cidx = @_get_vec_pos cv pos
+    # if b can be contained fully, return strcmp
+    ls1 = cv.sizes[cidx] - pos + 1
+    if(ls1 >= lb) 
+        return (ccall(:strncmp, Int32, (Ptr{Uint8}, Ptr{Uint8}, Uint), pointer(cv.chain[cidx])+pos-1, b, lb) == 0)
+    end
+    # else return && of two strcmps
+    return (ccall(:strncmp, Int32, (Ptr{Uint8}, Ptr{Uint8}, Uint), pointer(cv.chain[cidx])+pos-1, b, ls1) == 0) &&
+           (ccall(:strncmp, Int32, (Ptr{Uint8}, Ptr{Uint8}, Uint), pointer(cv.chain[cidx+1]), pointer(b)+ls1, lb-ls1) == 0) 
+end
+beginswith(cv::ChainedVector{Uint8}, b::Array{Uint8,1}) = beginswithat(cv, 1, b)
 

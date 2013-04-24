@@ -9,7 +9,7 @@ type SmileyData
     SmileyData() = new(zeros(Int, 12*5)) # represent 5 years of data in 12*5 monthly slots
 end
 
-beginswithat(a::Array{Uint8,1}, pos::Integer,  b::Array{Uint8,1}) = ((length(a)-pos+1) >= length(b) && ccall(:strncmp, Int32, (Ptr{Uint8}, Ptr{Uint8}, Uint), pointer(a)+pos-1, b, length(b)) == 0)
+#beginswithat(a::Array{Uint8,1}, pos::Integer,  b::Array{Uint8,1}) = ((length(a)-pos+1) >= length(b) && ccall(:strncmp, Int32, (Ptr{Uint8}, Ptr{Uint8}, Uint), pointer(a)+pos-1, b, length(b)) == 0)
         
 const smil = convert(Array{Uint8,1}, "smiley")
 const REC_SEP = '\n'
@@ -47,9 +47,10 @@ function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond
             # TODO: put a check and return error if not
             (0 >= end_pos) && (end_pos = final_pos)
             # TODO: optimize by implementing beginswithat in ChainedVector
-            recbytes = rdr.cv[start_pos:end_pos]
-            if(beginswithat(recbytes, 1, smil))
-                rec = ascii(recbytes)
+            #recbytes = rdr.cv[start_pos:end_pos]
+            #if(beginswithat(recbytes, 1, smil))
+            if(beginswithat(rdr.cv, start_pos, smil))
+                rec = ascii(rdr.cv[start_pos:end_pos])
                 jc.next_rec_pos = end_pos+2
                 jc.rec = split(rec, COL_SEP)
                 return :ok

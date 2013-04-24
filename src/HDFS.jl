@@ -5,7 +5,7 @@ import  Base.show, Base.print_matrix,
         Base.similar,
         Base.getindex, Base.setindex!,
         Base.push!, Base.pop!, Base.shift!, Base.empty!,
-        Base.search
+        Base.search, Base.beginswith
 
 export  hdfs_connect, hdfs_connect_as_user,
         hdfs_exists, hdfs_delete, 
@@ -20,7 +20,14 @@ export  hdfs_connect, hdfs_connect_as_user,
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
         HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
         HdfsJobCtx, finalize_hdfs_job_ctx, hdfs_do_job,
-        HdfsReader, read_next, reset_pos, position, eof
+        HdfsReader, read_next, reset_pos, position, eof,
+        ChainedVector, 
+        show, print_matrix,
+        size, strides, stride,
+        similar,
+        getindex, setindex!,
+        push!, pop!, shift!, empty!,
+        search, beginswith, beginswithat
 
 #using VectorUtils
 
