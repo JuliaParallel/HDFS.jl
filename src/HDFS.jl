@@ -53,11 +53,11 @@ hdfs_tell(fs::HdfsFS, file::HdfsFile) = ccall((:hdfsTell, _libhdfs), Int64, (Ptr
 
 hdfs_read(fs::HdfsFS, file::HdfsFile, buff::Ptr{Void}, len::Integer) = ccall((:hdfsRead, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), fs.ptr, file.ptr, buff, int32(len))
 function hdfs_read(fs::HdfsFS, file::HdfsFile, len::Integer)
-    local buff = Array(Uint8, len) 
+    buff = Array(Uint8, len) 
     if(-1 == (r = hdfs_read(fs, file, convert(Ptr{Void}, buff), len)))
         error("error reading file: -1")
     end
-    println("read ", r, " bytes")
+    #println("read ", r, " bytes")
     buff
 end
 
@@ -67,7 +67,7 @@ function hdfs_pread(fs::HdfsFS, file::HdfsFile, position::Int64, len::Integer)
     if(-1 == (r = hdfs_pread(fs, file, position, buff, len)))
         error("error reading file: -1")
     end
-    print("read ",r," bytes\n")
+    #print("read ",r," bytes\n")
     buff
 end
 
@@ -106,7 +106,7 @@ hdfs_create_directory(fs::HdfsFS, path::String) = ccall((:hdfsCreateDirectory, _
 hdfs_set_replication(fs::HdfsFS, path::String, replication::Integer)=ccall((:hdfsSetReplication, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Int16), fs.ptr, bytestring(path), int16(replication))
 
 function hdfs_list_directory(fs::HdfsFS, path::String)
-    local num_entries::Array{Int32,1} = zeros(Int32, 1)
+    num_entries = zeros(Int32, 1)
     file_info_list = ccall((:hdfsListDirectory, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}, Ptr{Int32}), fs.ptr, bytestring(path), num_entries)
     if(C_NULL == file_info_list)
         error(string("Error listing path ", path))
@@ -117,21 +117,21 @@ end
 hdfs_get_path_info(fs::HdfsFS, path::String) = HdfsFileInfo(ccall((:hdfsGetPathInfo, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path)))
 
 function hdfs_get_hosts(fs::HdfsFS, path::String, start::Integer, length::Integer)
-    local c_ptr::Ptr{Ptr{Ptr{Uint8}}} = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), int64(start), int64(length))
+    c_ptr = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), int64(start), int64(length))
     if(C_NULL == c_ptr)
         error(string("Error getting hosts for file", path))
     end
 
-    local i::Int = 1
-    local ret_vals::Array{Array{String,1},1} = Array(Array{String,1}, 0)
+    i = 1
+    ret_vals = Array(Array{String,1}, 0)
     while true
-        local h_list::Ptr{Ptr{Uint8}} = unsafe_ref(c_ptr, i)
+        h_list = unsafe_ref(c_ptr, i)
         (h_list == C_NULL) && break
         
-        local j::Int = 1
-        local arr::Array{String,1} = Array(String, 0)
+        j = 1
+        arr = Array(String, 0)
         while true
-            local hname::Ptr{Uint8} = unsafe_ref(h_list, j)
+            hname = unsafe_ref(h_list, j)
             (hname == C_NULL) && break
             push!(arr, bytestring(hname))
             #print(bytestring(hname), ", ")
