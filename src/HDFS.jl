@@ -1,5 +1,12 @@
 module HDFS
 
+import  Base.show, Base.print_matrix,
+        Base.size, Base.strides, Base.stride,
+        Base.similar,
+        Base.getindex, Base.setindex!,
+        Base.push!, Base.pop!, Base.shift!, Base.empty!,
+        Base.search
+
 export  hdfs_connect, hdfs_connect_as_user,
         hdfs_exists, hdfs_delete, 
         hdfs_flush, hdfs_get_capacity, hdfs_get_default_block_size, hdfs_get_path_info, hdfs_get_used, 
@@ -15,8 +22,9 @@ export  hdfs_connect, hdfs_connect_as_user,
         HdfsJobCtx, finalize_hdfs_job_ctx, hdfs_do_job,
         HdfsReader, read_next, reset_pos, position, eof
 
-using VectorUtils
+#using VectorUtils
 
+include("ChainedVector.jl")
 include("hdfs_types.jl")
 include("hdfs_reader.jl")
 include("hdfs_jobs.jl")

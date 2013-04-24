@@ -21,8 +21,8 @@ type HdfsReader
 end
 
 
-function read_into_buff(r::HdfsReader, start_pos::Int, buff::Vector{Uint8}, bytes::Int) 
-    hdfs_pread(r.fs, r.fi, start_pos, convert(Ptr{Void}, buff), bytes) 
+function read_into_buff(r::HdfsReader, start_pos::Integer, buff::Vector{Uint8}, bytes::Integer) 
+    hdfs_pread(r.fs, r.fi, convert(Int64, start_pos), convert(Ptr{Void}, buff), bytes) 
     buff
 end
 
@@ -46,7 +46,7 @@ function reset_pos(r::HdfsReader, blk::Int)
     buff = (length(r.cv) > 0) ? shift!(r.cv) : Array(Uint8, bytes)
     (length(buff) != bytes) && resize!(buff, bytes)
     r.begin_blk = blk
-    push!(r.cv, read_into_buff(r, start_pos, buff, bytes))
+    push!(r.cv, read_into_buff(r, start_pos, buff, convert(Int, bytes)))
 end
 
 position(r::HdfsReader) = (r.begin_blk > 0) ? ((r.finfo.block_sz)*(r.begin_blk-1) + r.cv.sz) : 0
