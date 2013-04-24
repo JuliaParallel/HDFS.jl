@@ -46,10 +46,7 @@ function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond
             # which should be true if MAX_REC_BYTES is correct.
             # TODO: put a check and return error if not
             (0 >= end_pos) && (end_pos = final_pos)
-            # TODO: optimize by implementing beginswithat in ChainedVector
-            #recbytes = rdr.cv[start_pos:end_pos]
-            #if(beginswithat(recbytes, 1, smil))
-            local is_interesting::Bool = beginswithat(rdr.cv, start_pos, smil) 
+            local is_interesting::Bool = beginswithat(rdr.cv, int(start_pos), smil) 
             if(is_interesting)
                 rec = ascii(rdr.cv[start_pos:end_pos])
                 jc.next_rec_pos = end_pos+2
