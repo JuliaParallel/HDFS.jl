@@ -105,9 +105,9 @@ end
 
 search(cv::ChainedVector{Uint8}, b) = search(cv,b,1)
 
-function beginswithat(cv::ChainedVector{Uint8}, pos::Integer, b::Array{Uint8,1}) 
+function beginswithat(cv::ChainedVector{Uint8}, pos::Int, b::Array{Uint8,1}) 
     lb = length(b) 
-    (length(cv) < (pos+lb-1)) && return 0
+    (int(length(cv)) < int(pos+lb-1)) && return 0
 
     # get the vector that contains pos
     cidx = @_get_vec_pos cv pos

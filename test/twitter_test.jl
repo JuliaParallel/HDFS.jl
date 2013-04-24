@@ -49,7 +49,8 @@ function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond
             # TODO: optimize by implementing beginswithat in ChainedVector
             #recbytes = rdr.cv[start_pos:end_pos]
             #if(beginswithat(recbytes, 1, smil))
-            if(beginswithat(rdr.cv, start_pos, smil))
+            local is_interesting::Bool = beginswithat(rdr.cv, start_pos, smil) 
+            if(is_interesting)
                 rec = ascii(rdr.cv[start_pos:end_pos])
                 jc.next_rec_pos = end_pos+2
                 jc.rec = split(rec, COL_SEP)
