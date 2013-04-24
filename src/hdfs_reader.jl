@@ -45,12 +45,6 @@ function reset_pos(r::HdfsReader, blk::Int)
 
     buff = (length(r.cv) > 0) ? shift!(r.cv) : Array(Uint8, bytes)
     (length(buff) != bytes) && resize!(buff, bytes)
-    #try
-    #    buff = shift!(r.cv)
-    #    (length(buff) != bytes) && resize!(buff, bytes)
-    #catch
-    #    buff = Array(Uint8, bytes)
-    #end
     r.begin_blk = blk
     push!(r.cv, read_into_buff(r, start_pos, buff, bytes))
 end

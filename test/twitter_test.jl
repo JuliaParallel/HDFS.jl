@@ -4,47 +4,19 @@
 
 using HDFS
 
-const HDFS_HOST = "localhost"
-const HDFS_PORT = 9000
-const HDFS_DATA_FILE = "/twitter_data.txt"
-
 type SmileyData
     monthly::Array{Int, 1}
     SmileyData() = new(zeros(Int, 12*5)) # represent 5 years of data in 12*5 monthly slots
 end
 
-function init_job_ctx()
-    global jc = HdfsJobCtx{Vector{String}}(HDFS_HOST, HDFS_PORT, HDFS_DATA_FILE)
-    global sd = Dict{String, SmileyData}()
-end
-
-function get_job_ctx()
-    global jc
-    jc
-end
-
-function destroy_job_ctx()
-    global jc
-    finalize_hdfs_job_ctx(jc)
-end
-
-function gather_results()
-    global sd
-    sd_ret = sd
-    sd = Dict{String, SmileyData}()
-    sd_ret
-end
-
-
 beginswithat(a::Array{Uint8,1}, pos::Integer,  b::Array{Uint8,1}) = ((length(a)-pos+1) >= length(b) && ccall(:strncmp, Int32, (Ptr{Uint8}, Ptr{Uint8}, Uint), pointer(a)+pos-1, b, length(b)) == 0)
         
-
 const smil = convert(Array{Uint8,1}, "smiley")
 const REC_SEP = '\n'
 const COL_SEP = "\t"
 const MAX_REC_BYTES = 1024
  
-function find_rec(jc::HdfsJobCtx{Vector{String}}, read_beyond::Bool = true)
+function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond::Bool = true)
     rdr = jc.rdr
     is_begin = (rdr.begin_blk == 1) # if first block, we should not ignore the first line
     start_pos = jc.next_rec_pos
@@ -90,7 +62,8 @@ function find_rec(jc::HdfsJobCtx{Vector{String}}, read_beyond::Bool = true)
     :not_ok
 end
 
-function process_rec(rec::Vector{String})
+function process_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}})
+    rec = jc.rec
     (length(rec) == 0) && return
 
     ts = rec[2]
@@ -102,21 +75,39 @@ function process_rec(rec::Vector{String})
 
     local smrec::SmileyData
     try
-        smrec = getindex(sd, smiley)
+        smrec = getindex(jc.results, smiley)
     catch
         smrec = SmileyData()
-        sd[smiley] = smrec
+        jc.results[smiley] = smrec
     end
 
     smrec.monthly[month_idx] += cnt
-    #println(rec, length(rec))
 end
 
-function write_smiley_data_summary()
-    for d in sd
+function reduce(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, results::Vector{Dict{String, Any}})
+    reduced = Dict{String, Any}()
+    for d in results
+        for (smiley,sd) in d
+            monthly = sd.monthly
+
+            if(has(reduced, smiley))
+                da = reduced[smiley]
+                da += monthly
+            else
+                reduced[smiley] = monthly
+            end
+        end
+    end
+    reduced
+end
+
+function summarize(results::Dict{String, Any})
+    for d in results
         smiley = d[1]
-        monthly = d[2].monthly
+        monthly = d[2]
         println(smiley, " ==>> total: ", sum(monthly), " max/min: ", max(monthly), "/", min(monthly))
     end
 end
+
+
 

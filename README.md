@@ -3,7 +3,7 @@ HDFS.jl
 
 HDFS.jl provides a wrapper over libhdfs and a julia map-reduce functionality built on top of HDFS. The file libhdfs.jl was originally written by Benjamin Yang (@benyang) and part of the julia/extras. Methods in HDFS.jl can be used for low level functionality, using direct HDFS APIs.
 
-File hdfs\_jobs.jl provides a simple parallel map-reduce functionality. The following are required in order to use it.
+File hdfs\_jobs.jl provides a simple parallel map-reduce functionality. Since this is work in progress, it may not be stable enough at all times. The following are required in order to use it.
 
 
 Map Reduce Setup:
@@ -13,22 +13,17 @@ Map Reduce Setup:
 - A job file must be written that defines:
 
 ````
-1. find_record(buff::Array{Uint8,1}, start_pos::Int64, len::Int64)
+1. find_rec(jc::JobContext)
     Identifies what consists a record.
-    Creates the record from input buffer, returns record, pos in buff to read the next record from.
+    Creates the record from input buffer, stores record and pos in buff to read the next record from in the job context.
     Find should also implement the filter that ignores (and skips over) records that are not interesting for the current job.
-2. process_record(rec)
+    find_rec should suitably read beyond the block to read complete records when required.
+2. process_rec(jc::JobContext)
     Process the record and accumulate results
-3. gather_results()
-    Collects results accumulated till now. This is called from the central node to collect data for the reduction step.
-    Called after processing of a block (distributed processing)
-    Called after processing of complete file (local processing)
-4. init_job_ctx()
-    Called before data processing methods are called to create globals, and job contexts
-5. get_job_ctx()
-    Gets the current job context.
-6. destroy_job_ctx()
-    Called after the job is completed. This should cleanup stuff created in init_job_ctx
+3. reduce(jc::JobContext, results::Vector)
+    Provided with all results to do the reduce step.
+4. summarize(results)
+    Provided with results from reduce steps for the final summarization.
 ````
 - The job file must be placed at identical location on all data nodes. (in future a way to do this automatically would be provided)
 
@@ -36,7 +31,7 @@ Map Reduce Setup:
 Map Reduce Execution:
 ---------------------
 - **require**("job\_file.jl")<br/>Imports job definition.
-- **hdfs\_job\_do\_parallel**(["datanode1", "datanode2",…], "job\_file.jl")<br/>This would bring up remote julia instances on all data nodes, schedule processing of data blocks on nodes that preferably have the data block locally.
+- **hdfs\_do_job**("hdfshost", hdfsport, "file_to_process", record, results)<br/>This would run the job on all available julia instances (presumably on all data nodes), schedule processing of data blocks on nodes that preferably have the data block locally.
 
 
 Test:
