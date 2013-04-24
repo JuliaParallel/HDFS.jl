@@ -20,7 +20,8 @@ function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond
     rdr = jc.rdr
     is_begin = (rdr.begin_blk == 1) # if first block, we should not ignore the first line
     start_pos = jc.next_rec_pos
-    final_pos = start_pos + length(rdr.cv) - 1
+    #final_pos = start_pos + length(rdr.cv) - 1
+    final_pos = length(rdr.cv)
     end_pos = 0
 
     if(!is_begin)
@@ -57,7 +58,7 @@ function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond
             end
         end
     end
-    jc.next_rec_pos = final_pos
+    jc.next_rec_pos = final_pos+1
     jc.rec = []
     :not_ok
 end

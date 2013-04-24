@@ -159,7 +159,7 @@ function process_queue(job_id::Int, jqarr::Vector{HdfsJobQueue})
                     remotecall_wait(jq.proc_id, HDFS.hdfs_do_job_block_id, job_id, blk_to_proc)
                     num_dones[jqidx] += 1
                     tot_dones[1] += 1
-                    println("$(num_dones[jqidx]) blocks completed at node $(jq.proc_id). total $(tot_dones[1]) of $(jql)")
+                    println("$(num_dones[jqidx]) blocks completed at node $(jq.proc_id). total $(tot_dones[1])")
                 end
                 jq.results = remotecall_fetch(jq.proc_id, hdfs_job_results, job_id)
                 println("worker node $(jq.proc_id) completed")
@@ -171,6 +171,7 @@ end
 function hdfs_do_job_block_id(job_id::Int, blk_to_proc::Integer)
     jc = hdfs_job(job_id)
     reset_pos(jc.rdr, blk_to_proc)
+    jc.next_rec_pos = int64(1)
     hdfs_process_block_buff(jc)
 end
 
@@ -178,13 +179,15 @@ end
 function hdfs_process_block_buff(jc::HdfsJobCtx)
     final_pos = length(jc.rdr.cv)
 
+    recs = 0
     while(jc.next_rec_pos <= final_pos)
         #println("jc.next_rec_pos = $(jc.next_rec_pos), final_pos = $(final_pos)")
         if(:ok == Main.find_rec(jc))
             #println("calling process_rec")
             Main.process_rec(jc)
+            recs += 1
         else
-            println("could not detect a record!!")
+            println((recs == 0) ? "no usable record in block" : "no usable record at end of block")
         end
     end
 end

@@ -80,7 +80,7 @@ function empty!{T}(cv::ChainedVector{T})
     if(cv.sz > 0)
         cv.sz = 0
         empty!(cv.sizes)
-        empty(cv.chain)
+        empty!(cv.chain)
     end
     :ok
 end
