@@ -34,7 +34,7 @@ function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond
         end
     end
   
-    while(start_pos <= final_pos)
+    while(int64(start_pos) <= int64(final_pos))
         end_pos = search(rdr.cv, REC_SEP, start_pos)-1
         #println("start_pos: $start_pos, final_pos: $final_pos, end_pos: $end_pos, read_beyond: $read_beyond") 
         if((0 >= end_pos) && !eof(rdr) && read_beyond)
