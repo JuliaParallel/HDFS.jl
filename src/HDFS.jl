@@ -123,13 +123,13 @@ function hdfs_get_hosts(fs::HdfsFS, path::String, start::Integer, length::Intege
     end
 
     i = 1
-    ret_vals = Array(Array{String,1}, 0)
+    ret_vals = Array(Array{ASCIIString,1}, 0)
     while true
         h_list = unsafe_ref(c_ptr, i)
         (h_list == C_NULL) && break
         
         j = 1
-        arr = Array(String, 0)
+        arr = Array(ASCIIString, 0)
         while true
             hname = unsafe_ref(h_list, j)
             (hname == C_NULL) && break
