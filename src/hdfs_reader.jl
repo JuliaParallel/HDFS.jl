@@ -35,7 +35,7 @@ function read_block_buff(r::HdfsReader, blk::Int, bytes::Int=0)
     buff = Array(Uint8, bytes)
     read_into_buff(r, start_pos, buff, bytes)
 end
-read_next(r::HdfsReader, bytes::Int) = push!(r.cv, read_block_buff(r, blk, bytes))
+read_next(r::HdfsReader, bytes::Int) = push!(r.cv, read_block_buff(r, r.begin_blk+1, bytes))
 
 # reset the current position to blk, discarding earlier data and reusing the buffer to read from blk
 function reset_pos(r::HdfsReader, blk::Int)
