@@ -27,7 +27,7 @@ function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond
         end_pos = search(rdr.cv, REC_SEP, start_pos)
         if((0 >= end_pos) && !eof(rdr) && read_beyond)
             read_next(rdr, MAX_REC_BYTES)
-            return find_rec(rdr, false)
+            return find_rec(jc, false)
         else
             start_pos = end_pos
         end
@@ -38,7 +38,7 @@ function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond
         #println("start_pos: $start_pos, final_pos: $final_pos, end_pos: $end_pos, read_beyond: $read_beyond") 
         if((0 >= end_pos) && !eof(rdr) && read_beyond)
             read_next(rdr, MAX_REC_BYTES)
-            return find_rec(rdr, false)
+            return find_rec(jc, false)
         else
             # if no rec boundary found, assume all data in buffer is the record.
             # this is valid only if this is the end of the file.
