@@ -50,7 +50,7 @@ function reset_pos(r::HdfsReader, blk::Int)
     push!(r.cv, read_into_buff(r, start_pos, buff, convert(Int, bytes)))
 end
 
-position(r::HdfsReader) = (r.begin_blk > 0) ? ((r.finfo.block_sz)*(r.begin_blk-1) + r.cv.sz) : 0
+position(r::HdfsReader) = int64((r.begin_blk > 0) ? ((r.finfo.block_sz)*(r.begin_blk-1) + r.cv.sz) : 0)
 eof(r::HdfsReader) = (position(r) == r.finfo.size)
     
 
