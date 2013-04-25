@@ -11,7 +11,7 @@ function hdfs_find_rec_csv(jc::HdfsJobCtx, rec_sep, col_sep, max_rec_bytes::Int,
         end_pos = search(rdr.cv, rec_sep, int(jc.next_rec_pos))
         if((0 >= end_pos) && !eof(rdr) && read_beyond)
             read_next(rdr, max_rec_bytes)
-            return find_rec_csv(jc, rec_sep, col_sep, 0, bchk, rchk, false)
+            return hdfs_find_rec_csv(jc, rec_sep, col_sep, 0, bchk, rchk, false)
         else
             jc.next_rec_pos = end_pos
         end
@@ -22,7 +22,7 @@ function hdfs_find_rec_csv(jc::HdfsJobCtx, rec_sep, col_sep, max_rec_bytes::Int,
         #println("jc.next_rec_pos $jc.next_rec_pos, final_pos: $final_pos, end_pos: $end_pos, read_beyond: $read_beyond") 
         if((0 >= end_pos) && !eof(rdr) && read_beyond)
             read_next(rdr, max_rec_bytes)
-            return find_rec_csv(jc, rec_sep, col_sep, 0, bchk, rchk, false)
+            return hdfs_find_rec_csv(jc, rec_sep, col_sep, 0, bchk, rchk, false)
         else
             # if no rec boundary found, assume all data in buffer is the record.
             # this is valid only if this is the end of the file.
