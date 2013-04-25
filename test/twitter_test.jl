@@ -15,8 +15,11 @@ const smil = convert(Array{Uint8,1}, "smiley")
 const REC_SEP = '\n'
 const COL_SEP = "\t"
 const MAX_REC_BYTES = 1024
- 
-function find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond::Bool = true)
+
+smiley_bchk(jc::HdfsJobCtx) = beginswithat(jc.rdr.cv, int(jc.next_rec_pos), smil) 
+find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}) = hdfs_find_rec_csv(jc, REC_SEP, COL_SEP, MAX_REC_BYTES, smiley_bchk)
+
+function find_rec_old(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, read_beyond::Bool = true)
     rdr = jc.rdr
     is_begin = (rdr.begin_blk == 1) # if first block, we should not ignore the first line
     start_pos = jc.next_rec_pos

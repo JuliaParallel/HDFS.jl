@@ -17,17 +17,23 @@ export  hdfs_connect, hdfs_connect_as_user,
         hdfs_pread, hdfs_read, hdfs_seek, hdfs_tell, hdfs_write,
         hdfs_set_replication,
         hdfs_get_hosts,
+        # from hdfs_types.jl
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
         HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
+        # from hdfs_jobs.jl
         HdfsJobCtx, finalize_hdfs_job_ctx, hdfs_do_job,
+        # from hdfs_reader.jl
         HdfsReader, read_next, reset_pos, position, eof,
+        # from ChainedVector.jl
         ChainedVector, 
         show, print_matrix,
         size, strides, stride,
         similar,
         getindex, setindex!,
         push!, pop!, shift!, empty!,
-        search, beginswith, beginswithat
+        search, beginswith, beginswithat,
+        # from hdfs_mrutils.jl
+        hdfs_find_rec_csv
 
 #using VectorUtils
 
@@ -35,6 +41,7 @@ include("ChainedVector.jl")
 include("hdfs_types.jl")
 include("hdfs_reader.jl")
 include("hdfs_jobs.jl")
+include("hdfs_mrutils.jl")
 
 finalize_file_info_list(fi::HdfsFileInfoList) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, length(fi.arr))
 finalize_file_info(fi::HdfsFileInfo) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, 1)
