@@ -43,17 +43,48 @@ include("hdfs_reader.jl")
 include("hdfs_jobs.jl")
 include("hdfs_mrutils.jl")
 
+const hdfs_fsstore = Dict{(String, Integer, String), Vector{Any}}()
+
 finalize_file_info_list(fi::HdfsFileInfoList) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, length(fi.arr))
 finalize_file_info(fi::HdfsFileInfo) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, 1)
 function finalize_hdfs_fs(fs::HdfsFS) 
-    if(C_NULL != fs.ptr) 
+    (C_NULL == fs.ptr) && return
+    key, arr = _get_ptr_ref(fs.host, fs.port, fs.user, false)
+    if((arr[1] -= 1) == 0)
         ccall((:hdfsDisconnect, _libhdfs), Int32, (Ptr{Void},), fs.ptr) 
-        fs.ptr = C_NULL
+        arr[2] = fs.ptr = C_NULL
+        # TODO: remove from hdfs_fsstore to save space
     end
 end
 
-hdfs_connect_as_user(host::String, port::Integer, user::String) = HdfsFS(ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32, Ptr{Uint8}), bytestring(host), int32(port), bytestring(user)))
-hdfs_connect(host::String="default", port::Integer=0) = HdfsFS(ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32), bytestring(host), int32(port)))
+# hdfs_connect returns pointers to the same handle across multiple calls for the same file system
+# so we must have an abstraction with reference count
+function _get_ptr_ref(host::String, port::Integer, user::String="", incr::Bool=true)
+    key = (host, port, user)
+    if(has(hdfs_fsstore, key))
+        arr = hdfs_fsstore[key]
+        if(arr[1] > 0)
+            incr && (arr[1] += 1)
+            return key, arr
+        end
+    end
+    key, [0, C_NULL]
+end
+
+function hdfs_connect_as_user(host::String, port::Integer, user::String) 
+    key, arr = _get_ptr_ref(host, port, user)
+    (0 != arr[1]) && return HdfsFS(host, port, user, arr[2])
+    ptr = ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32, Ptr{Uint8}), bytestring(host), int32(port), bytestring(user))
+    (C_NULL != ptr) && (hdfs_fsstore[key] = [1, ptr])
+    HdfsFS(host, port, user, ptr)
+end
+function hdfs_connect(host::String="default", port::Integer=0) 
+    key, arr = _get_ptr_ref(host, port, "")
+    (0 != arr[1]) && return HdfsFS(host, port, "", arr[2])
+    ptr = ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32), bytestring(host), int32(port))
+    (C_NULL != ptr) && (hdfs_fsstore[key] = [1, ptr])
+    HdfsFS(host, port, "", ptr)
+end
 
 
 # file control flags need to be done manually

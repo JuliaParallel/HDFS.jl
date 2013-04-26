@@ -13,12 +13,13 @@ end
 
 ## used to enforce types ##
 type HdfsFS
+    host::String
+    port::Int
+    user::String
     ptr::Ptr{Void}
-    function HdfsFS(pt::Ptr{Void})
-        fs = new(pt)
-        if(fs != C_NULL)
-            finalizer(fs, finalize_hdfs_fs)
-        end
+    function HdfsFS(host::String, port::Int, user::String, pt::Ptr{Void})
+        fs = new(host, port, user, pt)
+        (pt != C_NULL) && finalizer(fs, finalize_hdfs_fs)
         fs
     end
 end

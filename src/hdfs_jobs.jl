@@ -13,7 +13,8 @@
 
 
 # TODO:
-# - distribute file to be loaded to all machines
+# - JobContext should store job results and a job status flag
+# - Firing a job should be async, with fetch giving the jobcontext/result back
 # - multiple workers per node
 # - better block distribution
 # - support reduction step?
@@ -47,7 +48,6 @@ end
 function finalize_hdfs_job_ctx(jc::HdfsJobCtx)
     if(jc.valid)
         hdfs_close_file(jc.rdr.fs, jc.rdr.fi)
-        finalize_hdfs_fs(jc.rdr.fs)
         jc.valid = false
     end
 end
@@ -125,6 +125,8 @@ function find_wrkr_id(host_or_ip::ASCIIString, machines::Vector{ASCIIString}, hn
 end
 
 
+# TODO:
+# queue should index blocks with 
 function setup_queue{Tr,Tc}(jc::HdfsJobCtx{Tr,Tc}, machines::Vector{ASCIIString}, ips::Vector{ASCIIString}, hns::Vector{ASCIIString})
     nnodes = length(machines)+1 # +1 for the namenode, which holds unclaimed blocks to be picked up by any node that finishes early
     blkids = [ Array(Int, 0) for i in 1:nnodes ]
@@ -159,15 +161,18 @@ function process_queue(job_id::Int, jqarr::Vector{HdfsJobQueue})
                     remotecall_wait(jq.proc_id, HDFS.hdfs_do_job_block_id, job_id, blk_to_proc)
                     num_dones[jqidx] += 1
                     tot_dones[1] += 1
-                    println("$(num_dones[jqidx]) blocks completed at node $(jq.proc_id). total $(tot_dones[1])")
+                    println("job $(job_id): $(num_dones[jqidx]) blocks completed at node $(jq.proc_id). total $(tot_dones[1])")
                 end
                 jq.results = remotecall_fetch(jq.proc_id, hdfs_job_results, job_id)
-                println("worker node $(jq.proc_id) completed")
+                println("job $(job_id): worker node $(jq.proc_id) completed")
             end
         end
     end
 end
 
+# TODO: should take filename and block id.
+# if jc does not have the named file open, open it and read relevant block
+# the scheduler would try and schedule a processor for a file that is already open 
 function hdfs_do_job_block_id(job_id::Int, blk_to_proc::Integer)
     jc = hdfs_job(job_id)
     reset_pos(jc.rdr, blk_to_proc)
@@ -217,25 +222,4 @@ function hdfs_do_job{Tr,Tc}(hdfs_host::String, hdfs_port::Integer, fname::String
     hdfs_destroy_job(job_id)
     res
 end
-
-# process a complete file (all blocks) at a single node
-# hdfs_do_job with a single node processes all blocks locally
-# this is not required
-#function hdfs_job_do_serial(hdfs_host::String, hdfs_port::Integer, fname::String, rec::Any, results::Any)
-#    job_id = hdfs_next_job_id()
-#    hdfs_init_job(job_id, hdfs_host, hdfs_port, fname, rec, results)
-#    jc = hdfs_job(job_id)
-#
-#    for blk_id in 1:length(jc.fblk_hosts)
-#        println("processing block $blk_id");
-#        #println("$(int(start_pos*100/sz)): reading block of len $len at $start_pos of $sz")
-#        reset_pos(jc.rdr, blk_id)
-#        #println("reset pos")
-#        hdfs_process_block_buff(jc)
-#    end
-#    res = Main.reduce(jc, [jc.results])
-#    Main.summarize(res)
-#    hdfs_destroy_job(job_id)
-#    res
-#end
 

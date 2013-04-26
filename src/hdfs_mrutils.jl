@@ -1,6 +1,14 @@
 ##
 # A bunch of methods that can be used to assist in map-reduce jobs
 
+##
+# generic routine to detect CSV type of records in a hdfs file block
+# rec_sep: record separator character
+# col_sep: column separator character
+# max_rec_bytes: maximum possible bytes in a record as a hint. (used to read past the block to complete partial records at end of block)
+# bchk: function that works on raw bytes to determine if this is interesting to be split into columns. used as an optimization for rchk
+# rchk: function that works on a record (array of strings) to determine if this is interesting to be passed to process method
+# read_beyond: flag used to recurse into the next block
 function hdfs_find_rec_csv(jc::HdfsJobCtx, rec_sep, col_sep, max_rec_bytes::Int, bchk::Function=(x...)->true, rchk::Function=(x...)->true, read_beyond::Bool = true)
     rdr = jc.rdr
     is_begin = (rdr.begin_blk == 1) # if first block, we should not ignore the first line
