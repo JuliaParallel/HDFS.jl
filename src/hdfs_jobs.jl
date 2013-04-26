@@ -25,21 +25,21 @@
 const hdfs_jobstore = Dict{Int, Any}()
 _hdfs_next_job_id = 1
 
-type HdfsJobCtx{Tr, Tc}
+type HdfsJobCtx
     rdr::HdfsReader
     fname::String
     fblk_hosts::Vector{Vector{String}}
     valid::Bool
     next_rec_pos::Int64
-    rec::Tr
-    results::Tc
+    rec::Union(Any,Nothing)
+    results::Union(Any,Nothing)
 
-    function HdfsJobCtx(hdfs_host::String, hdfs_port::Integer, fname::String, rec::Tr, results::Tc)
+    function HdfsJobCtx(hdfs_host::String, hdfs_port::Integer, fname::String)
         fs = hdfs_connect(hdfs_host, hdfs_port)
         file = hdfs_open_file_read(fs, fname)
         finfo = hdfs_get_path_info(fs, fname)
         rdr = HdfsReader(fs, file, finfo, 0)
-        jc = new(rdr, fname, hdfs_get_hosts(fs, fname, 0, finfo.size), true, 1, rec, results)
+        jc = new(rdr, fname, hdfs_get_hosts(fs, fname, 0, finfo.size), true, 1, Nothing, Nothing)
         finalizer(jc, finalize_hdfs_job_ctx)
         jc
     end
@@ -59,11 +59,9 @@ function hdfs_next_job_id()
     job_id
 end
 
-function hdfs_init_job(job_id::Int, hdfs_host::String, hdfs_port::Integer, fname::String, rec::Any, results::Any)
+function hdfs_init_job(job_id::Int, hdfs_host::String, hdfs_port::Integer, fname::String)
     global hdfs_jobstore
-    tc = typeof(results)
-    tr = typeof(rec)
-    jc = HdfsJobCtx{tr,tc}(hdfs_host, hdfs_port, fname, rec, results)
+    jc = HdfsJobCtx(hdfs_host, hdfs_port, fname)
     hdfs_jobstore[job_id] = jc
     :ok
 end
@@ -88,13 +86,13 @@ function hdfs_job_results(job_id::Int)
     jc.results
 end
 
-type HdfsJobQueue{Tc}
+type HdfsJobQueue
     machine::ASCIIString
     hostname::ASCIIString
     ip::ASCIIString
     proc_id::Int
     block_ids::Vector{Int}
-    results::Tc
+    results::Any
     function HdfsJobQueue(machine, hostname, ip, proc_id, block_ids)
         new(machine, hostname, ip, proc_id, block_ids)
     end
@@ -127,7 +125,7 @@ end
 
 # TODO:
 # queue should index blocks with 
-function setup_queue{Tr,Tc}(jc::HdfsJobCtx{Tr,Tc}, machines::Vector{ASCIIString}, ips::Vector{ASCIIString}, hns::Vector{ASCIIString})
+function setup_queue(jc::HdfsJobCtx, machines::Vector{ASCIIString}, ips::Vector{ASCIIString}, hns::Vector{ASCIIString})
     nnodes = length(machines)+1 # +1 for the namenode, which holds unclaimed blocks to be picked up by any node that finishes early
     blkids = [ Array(Int, 0) for i in 1:nnodes ]
 
@@ -137,9 +135,9 @@ function setup_queue{Tr,Tc}(jc::HdfsJobCtx{Tr,Tc}, machines::Vector{ASCIIString}
     end
 
     jqarr = Array(HdfsJobQueue, nnodes)
-    jqarr[1] = HdfsJobQueue{Tc}("", "", "", 1, blkids[1])
+    jqarr[1] = HdfsJobQueue("", "", "", 1, blkids[1])
     for idx in 2:nnodes
-        jqarr[idx] = HdfsJobQueue{Tc}(machines[idx-1], hns[idx-1], ips[idx-1], idx, blkids[idx])
+        jqarr[idx] = HdfsJobQueue(machines[idx-1], hns[idx-1], ips[idx-1], idx, blkids[idx])
     end
     jqarr
 end
@@ -197,9 +195,9 @@ function hdfs_process_block_buff(jc::HdfsJobCtx)
     end
 end
 
-function hdfs_do_job{Tr,Tc}(hdfs_host::String, hdfs_port::Integer, fname::String, rec::Tr, results::Tc)
+function hdfs_do_job(hdfs_host::String, hdfs_port::Integer, fname::String)
     job_id = hdfs_next_job_id()
-    hdfs_init_job(job_id, hdfs_host, hdfs_port, fname, rec, results)
+    hdfs_init_job(job_id, hdfs_host, hdfs_port, fname)
     jc = hdfs_job(job_id)
 
     #ips, hns = setup_remotes(machines, command_file)
@@ -209,7 +207,7 @@ function hdfs_do_job{Tr,Tc}(hdfs_host::String, hdfs_port::Integer, fname::String
     jqarr = setup_queue(jc, machines, ips, hns)
 
     for jq in jqarr
-        (jq.proc_id != myid()) && remotecall_wait(jq.proc_id, hdfs_init_job, job_id, hdfs_host, hdfs_port, fname, rec, results)
+        (jq.proc_id != myid()) && remotecall_wait(jq.proc_id, hdfs_init_job, job_id, hdfs_host, hdfs_port, fname)
     end
 
     process_queue(job_id, jqarr)
@@ -217,7 +215,7 @@ function hdfs_do_job{Tr,Tc}(hdfs_host::String, hdfs_port::Integer, fname::String
     for jq in jqarr
         (jq.proc_id != myid()) && remotecall_wait(jq.proc_id, hdfs_destroy_job, job_id)
     end
-    res = Main.reduce(jc, convert(Vector{Tc}, [x.results for x in jqarr]))
+    res = Main.reduce(jc, filter((x)->(x!=Nothing), [x.results for x in jqarr]))
     Main.summarize(res)
     hdfs_destroy_job(job_id)
     res

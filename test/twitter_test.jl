@@ -12,9 +12,9 @@ end
 const smil = convert(Array{Uint8,1}, "smiley")
 
 smiley_bchk(jc::HdfsJobCtx) = beginswithat(jc.rdr.cv, int(jc.next_rec_pos), smil) 
-find_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}) = hdfs_find_rec_csv(jc, '\n', '\t', 1024, smiley_bchk)
+find_rec(jc::HdfsJobCtx) = hdfs_find_rec_csv(jc, '\n', '\t', 1024, smiley_bchk)
 
-function process_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}})
+function process_rec(jc::HdfsJobCtx)
     rec = jc.rec
     (length(rec) == 0) && return
 
@@ -29,6 +29,7 @@ function process_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}})
     try
         smrec = getindex(jc.results, smiley)
     catch
+        (Nothing == jc.results) && (jc.results = Dict{String, SmileyData}())
         smrec = SmileyData()
         jc.results[smiley] = smrec
     end
@@ -36,8 +37,8 @@ function process_rec(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}})
     smrec.monthly[month_idx] += cnt
 end
 
-function reduce(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, results::Vector{Dict{String, Any}})
-    reduced = Dict{String, Any}()
+function reduce(jc::HdfsJobCtx, results::Vector)
+    reduced = Dict{String, Vector{Int}}()
     for d in results
         for (smiley,sd) in d
             monthly = sd.monthly
@@ -53,7 +54,7 @@ function reduce(jc::HdfsJobCtx{Vector{String}, Dict{String, Any}}, results::Vect
     reduced
 end
 
-function summarize(results::Dict{String, Any})
+function summarize(results::Dict{String, Vector{Int}})
     for d in results
         smiley = d[1]
         monthly = d[2]
