@@ -24,20 +24,11 @@ export  hdfs_connect, hdfs_connect_as_user,
         HdfsJobCtx, finalize_hdfs_job_ctx, hdfs_do_job,
         # from hdfs_reader.jl
         HdfsReader, read_next, reset_pos, position, eof,
-        # from ChainedVector.jl
-        ChainedVector, 
-        show, print_matrix,
-        size, strides, stride,
-        similar,
-        getindex, setindex!,
-        push!, pop!, shift!, empty!,
-        search, beginswith, beginswithat,
         # from hdfs_mrutils.jl
         hdfs_find_rec_csv
 
-#using VectorUtils
+using ChainedVectors
 
-include("ChainedVector.jl")
 include("hdfs_types.jl")
 include("hdfs_reader.jl")
 include("hdfs_jobs.jl")
@@ -61,7 +52,7 @@ end
 # so we must have an abstraction with reference count
 function _get_ptr_ref(host::String, port::Integer, user::String="", incr::Bool=true)
     key = (host, port, user)
-    if(has(hdfs_fsstore, key))
+    if(haskey(hdfs_fsstore, key))
         arr = hdfs_fsstore[key]
         if(arr[1] > 0)
             incr && (arr[1] += 1)
@@ -178,13 +169,13 @@ function hdfs_get_hosts(fs::HdfsFS, path::String, start::Integer, length::Intege
     i = 1
     ret_vals = Array(Array{ASCIIString,1}, 0)
     while true
-        h_list = unsafe_ref(c_ptr, i)
+        h_list = unsafe_load(c_ptr, i)
         (h_list == C_NULL) && break
         
         j = 1
         arr = Array(ASCIIString, 0)
         while true
-            hname = unsafe_ref(h_list, j)
+            hname = unsafe_load(h_list, j)
             (hname == C_NULL) && break
             push!(arr, bytestring(hname))
             #print(bytestring(hname), ", ")

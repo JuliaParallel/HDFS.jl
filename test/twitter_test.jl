@@ -3,6 +3,7 @@
 # used in tweets between year 2006 to 2009, based on data from infochimps.
 
 using HDFS
+using ChainedVectors
 
 type SmileyData
     monthly::Array{Int, 1}
@@ -29,7 +30,7 @@ function process_rec(jc::HdfsJobCtx)
     try
         smrec = getindex(jc.results, smiley)
     catch
-        (Nothing == jc.results) && (jc.results = Dict{String, SmileyData}())
+        (nothing == jc.results) && (jc.results = Dict{String, SmileyData}())
         smrec = SmileyData()
         jc.results[smiley] = smrec
     end

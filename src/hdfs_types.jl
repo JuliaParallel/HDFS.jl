@@ -56,7 +56,7 @@ type HdfsFileInfo
 
     function HdfsFileInfo(pt::Ptr{c_hdfsfileinfo})
         if(C_NULL != pt)
-            cfi::c_hdfsfileinfo = unsafe_ref(pt)
+            cfi::c_hdfsfileinfo = unsafe_load(pt)
             fi = new(pt, cfi.mKind, bytestring(cfi.mName), int64(cfi.mLastMod), cfi.mSize, cfi.mReplication, cfi.mBlockSize, 
                         bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, int64(cfi.mLastAccess))
             finalizer(fi, finalize_file_info)

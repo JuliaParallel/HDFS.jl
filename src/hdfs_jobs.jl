@@ -1,16 +1,11 @@
 # jobs should define:
-# 1. find_rec(jc::HdfsJobCtx)
+# 1. fn_find_rec(jc::HdfsJobCtx)
 #       returns reader_status, rec, end_pos
-# 2. process_rec(rec)
+# 2. fn_map(jc::JobContext)
 #       process record and accumulate results
-# 3. gather_results()
-#       collects results accumulated till now
-#       called after processing of a block (distributed processing)
-#       called after procedding of complete file (local processing)
-# 4. init_job_ctx()
-# 5. get_job_ctx()
-# 6. destroy_job_ctx()
-
+# 3. fn_reduce(jc::JobContext, [map results...])
+#       combine results of multiple maps
+# 4. fn_summarize(output of fn_reduce)
 
 # TODO:
 # - JobContext should store job results and a job status flag
@@ -33,13 +28,17 @@ type HdfsJobCtx
     next_rec_pos::Int64
     rec::Union(Any,Nothing)
     results::Union(Any,Nothing)
+    fn_find_rec::Function
+    fn_map::Function
+    fn_reduce::Function
+    fn_summarize::Function
 
-    function HdfsJobCtx(hdfs_host::String, hdfs_port::Integer, fname::String)
+    function HdfsJobCtx(hdfs_host::String, hdfs_port::Integer, fname::String, fn_find_rec::Function, fn_map::Function, fn_reduce::Function, fn_summarize::Function)
         fs = hdfs_connect(hdfs_host, hdfs_port)
         file = hdfs_open_file_read(fs, fname)
         finfo = hdfs_get_path_info(fs, fname)
         rdr = HdfsReader(fs, file, finfo, 0)
-        jc = new(rdr, fname, hdfs_get_hosts(fs, fname, 0, finfo.size), true, 1, Nothing, Nothing)
+        jc = new(rdr, fname, hdfs_get_hosts(fs, fname, 0, finfo.size), true, 1, nothing, nothing, fn_find_rec, fn_map, fn_reduce, fn_summarize)
         finalizer(jc, finalize_hdfs_job_ctx)
         jc
     end
@@ -59,16 +58,16 @@ function hdfs_next_job_id()
     job_id
 end
 
-function hdfs_init_job(job_id::Int, hdfs_host::String, hdfs_port::Integer, fname::String)
+function hdfs_init_job(job_id::Int, hdfs_host::String, hdfs_port::Integer, fname::String, fn_find_rec::Function, fn_map::Function, fn_reduce::Function, fn_summarize::Function)
     global hdfs_jobstore
-    jc = HdfsJobCtx(hdfs_host, hdfs_port, fname)
+    jc = HdfsJobCtx(hdfs_host, hdfs_port, fname, fn_find_rec, fn_map, fn_reduce, fn_summarize)
     hdfs_jobstore[job_id] = jc
     :ok
 end
 
 function hdfs_destroy_job(job_id::Int)
     global hdfs_jobstore
-    if(has(hdfs_jobstore, job_id))
+    if(haskey(hdfs_jobstore, job_id))
         jc = hdfs_jobstore[job_id]
         delete!(hdfs_jobstore, job_id)
         finalize_hdfs_job_ctx(jc)
@@ -185,9 +184,9 @@ function hdfs_process_block_buff(jc::HdfsJobCtx)
     recs = 0
     while(jc.next_rec_pos <= final_pos)
         #println("jc.next_rec_pos = $(jc.next_rec_pos), final_pos = $(final_pos)")
-        if(:ok == Main.find_rec(jc))
+        if(:ok == jc.fn_find_rec(jc))
             #println("calling process_rec")
-            Main.process_rec(jc)
+            jc.fn_map(jc)
             recs += 1
         else
             println((recs == 0) ? "no usable record in block" : "no usable record at end of block")
@@ -195,9 +194,9 @@ function hdfs_process_block_buff(jc::HdfsJobCtx)
     end
 end
 
-function hdfs_do_job(hdfs_host::String, hdfs_port::Integer, fname::String)
+function hdfs_do_job(hdfs_host::String, hdfs_port::Integer, fname::String, fn_find_rec::Function, fn_map::Function, fn_reduce::Function=(x,y)->y, fn_summarize::Function=(x)->nothing)
     job_id = hdfs_next_job_id()
-    hdfs_init_job(job_id, hdfs_host, hdfs_port, fname)
+    hdfs_init_job(job_id, hdfs_host, hdfs_port, fname, fn_find_rec, fn_map, fn_reduce, fn_summarize)
     jc = hdfs_job(job_id)
 
     #ips, hns = setup_remotes(machines, command_file)
@@ -207,7 +206,7 @@ function hdfs_do_job(hdfs_host::String, hdfs_port::Integer, fname::String)
     jqarr = setup_queue(jc, machines, ips, hns)
 
     for jq in jqarr
-        (jq.proc_id != myid()) && remotecall_wait(jq.proc_id, hdfs_init_job, job_id, hdfs_host, hdfs_port, fname)
+        (jq.proc_id != myid()) && remotecall_wait(jq.proc_id, hdfs_init_job, job_id, hdfs_host, hdfs_port, fname, fn_find_rec, fn_map, fn_reduce, fn_summarize)
     end
 
     process_queue(job_id, jqarr)
@@ -215,8 +214,8 @@ function hdfs_do_job(hdfs_host::String, hdfs_port::Integer, fname::String)
     for jq in jqarr
         (jq.proc_id != myid()) && remotecall_wait(jq.proc_id, hdfs_destroy_job, job_id)
     end
-    res = Main.reduce(jc, filter((x)->(x!=Nothing), [x.results for x in jqarr]))
-    Main.summarize(res)
+    res = jc.fn_reduce(jc, filter((x)->(x!=nothing), [x.results for x in jqarr]))
+    jc.fn_summarize(res)
     hdfs_destroy_job(job_id)
     res
 end

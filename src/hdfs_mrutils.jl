@@ -39,7 +39,8 @@ function hdfs_find_rec_csv(jc::HdfsJobCtx, rec_sep, col_sep, max_rec_bytes::Int,
             (0 >= end_pos) && (end_pos = final_pos)
             local is_interesting::Bool = bchk(jc)
             if(is_interesting)
-                jc.rec = split(ascii(rdr.cv[jc.next_rec_pos:end_pos]), col_sep)
+                #jc.rec = split(ascii(rdr.cv[jc.next_rec_pos:end_pos]), col_sep)
+                jc.rec = split(bytestring(sub(rdr.cv, jc.next_rec_pos:end_pos)), col_sep)
                 is_interesting = rchk(jc)
             end
             jc.next_rec_pos = end_pos+2
