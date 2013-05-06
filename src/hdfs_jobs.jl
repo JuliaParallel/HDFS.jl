@@ -135,8 +135,10 @@ function setup_queue(jc::HdfsJobCtx, machines::Vector{ASCIIString}, ips::Vector{
 
     jqarr = Array(HdfsJobQueue, nnodes)
     jqarr[1] = HdfsJobQueue("", "", "", 1, blkids[1])
+    println("1 numblocks: $(length(blkids[1]))")
     for idx in 2:nnodes
         jqarr[idx] = HdfsJobQueue(machines[idx-1], hns[idx-1], ips[idx-1], idx, blkids[idx])
+        println("$idx ($(machines[idx-1])): hostname: $(hns[idx-1])  ip: $(ips[idx-1])  numblocks: $(length(blkids[idx]))")
     end
     jqarr
 end
