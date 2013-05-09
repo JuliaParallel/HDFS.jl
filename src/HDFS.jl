@@ -21,13 +21,17 @@ export  hdfs_connect, hdfs_connect_as_user,
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
         HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
         # from hdfs_jobs.jl
-        HdfsJobCtx, finalize_hdfs_job_ctx, hdfs_do_job,
+        results, status, mapreduce, unload,
+        STATE_STARTING, STATE_RUNNING, STATE_COMPLETE, STATE_ERROR,
+        HdfsJobCtx, HdfsJobRunInfo, HdfsJobSchedInfo,
+        JobId,
         # from hdfs_reader.jl
         HdfsReader, read_next, reset_pos, position, eof,
         # from hdfs_mrutils.jl
         hdfs_find_rec_csv
 
 using ChainedVectors
+using URLParse
 
 include("hdfs_types.jl")
 include("hdfs_reader.jl")
