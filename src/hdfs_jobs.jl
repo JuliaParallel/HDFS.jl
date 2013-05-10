@@ -73,23 +73,16 @@ function _worker_map_chunk(jid::JobId, fname::String, blk_id)
 
     j = ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid]
     jinfo = j.info
-    reset_pos(jinfo.rdr, fname, blk_id)
-    jinfo.next_rec_pos = 1
-    
-    chunk_len = block_sz(jinfo.rdr, blk_id)
     recs = 0
-    fn_find_rec = j.fn_find_rec
     fn_map = j.fn_map
     fn_collect = j.fn_collect
-    while(jinfo.next_rec_pos <= chunk_len)
-        if(:ok == fn_find_rec(j))
-            fn_map(j)
-            fn_collect(j)
-            recs += 1
-        else
-            println((recs == 0) ? "no usable record in block" : "no usable record at end of block")
-        end
+
+    iter = iterator(jinfo.rdr, fname, blk_id, j.fn_find_rec)
+    for rec in iter
+        jinfo.results = fn_collect(jinfo.results, fn_map(rec))
+        recs += 1
     end
+    println((recs == 0) ? "no usable record in block" : "no usable record at end of block")
 end
 
 

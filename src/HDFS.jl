@@ -5,7 +5,8 @@ import  Base.show, Base.print_matrix,
         Base.similar,
         Base.getindex, Base.setindex!,
         Base.push!, Base.pop!, Base.shift!, Base.empty!,
-        Base.search, Base.beginswith
+        Base.search, Base.beginswith,
+        Base.start, Base.done, Base.next
 
 export  hdfs_connect, hdfs_connect_as_user,
         hdfs_exists, hdfs_delete, 
@@ -26,7 +27,8 @@ export  hdfs_connect, hdfs_connect_as_user,
         HdfsJobCtx, HdfsJobRunInfo, HdfsJobSchedInfo,
         JobId,
         # from hdfs_reader.jl
-        HdfsReader, read_next, reset_pos, position, eof,
+        HdfsReader, read_next, reset_pos, position, eof, block_sz,
+        HdfsReaderIter, iterator, start, done, next, 
         # from hdfs_mrutils.jl
         hdfs_find_rec_csv
 
@@ -83,8 +85,8 @@ end
 
 
 # file control flags need to be done manually
-function hdfs_open_file(fs::HdfsFS, path::String, flags::Integer, buffer_sz::Integer=0, replication::Integer=0, block_sz::Integer=0)
-  file = ccall((:hdfsOpenFile, _libhdfs), Ptr{Void}, (Ptr{Void}, Ptr{Uint8}, Int32, Int32, Int16, Int32), fs.ptr, bytestring(path), int32(flags), int32(buffer_sz), int16(replication), int32(block_sz))
+function hdfs_open_file(fs::HdfsFS, path::String, flags::Integer, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
+  file = ccall((:hdfsOpenFile, _libhdfs), Ptr{Void}, (Ptr{Void}, Ptr{Uint8}, Int32, Int32, Int16, Int32), fs.ptr, bytestring(path), int32(flags), int32(buffer_sz), int16(replication), int32(bsz))
   return HdfsFile(file)
 end
 hdfs_open_file_read(fs::HdfsFS, path::String) = hdfs_open_file(fs, path, Base.JL_O_RDONLY)

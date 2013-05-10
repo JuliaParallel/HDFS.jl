@@ -71,3 +71,21 @@ function block_sz(r::HdfsReader, blk::Int)
     min(bs, r.finfo.size-start_pos)
 end
 
+
+type HdfsReaderIter
+    r::HdfsReader
+    fn_find_rec::Function
+    chunk_len::Int
+    rec::Union(Any,Nothing)
+end
+
+function iterator(r::HdfsReader, url::String, blk::Int, fn_find_rec::Function)
+    reset_pos(r, url, blk)
+    chunk_len = block_sz(r, blk)
+    HdfsReaderIter(r, fn_find_rec, chunk_len, nothing)
+end
+
+start(iter::HdfsReaderIter) = iter.fn_find_rec(iter, 1)
+done(iter, state) = (state > iter.chunk_len)
+next(iter, state) = (iter.rec, iter.fn_find_rec(iter, state))
+
