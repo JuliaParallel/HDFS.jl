@@ -67,7 +67,7 @@ function _worker_fetch_collected(jid::JobId)
     ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid].info.results
 end
 
-function _worker_map_chunk(jid::JobId, fname::String, blk_id)
+function _worker_map_chunk(jid::JobId, chunk_url::String)
     global _job_store
     global _def_wrkr_job_store
 
@@ -77,11 +77,14 @@ function _worker_map_chunk(jid::JobId, fname::String, blk_id)
     fn_map = j.fn_map
     fn_collect = j.fn_collect
 
-    iter = iterator(jinfo.rdr, fname, blk_id, j.fn_find_rec)
-    for rec in iter
-        jinfo.results = fn_collect(jinfo.results, fn_map(rec))
-        recs += 1
+    results = jinfo.results
+    for rec in iterator(jinfo.rdr, chunk_url, j.fn_find_rec)
+        for mapped_rec in fn_map(rec)
+            results = fn_collect(results, mapped_rec)
+            recs += 1
+        end
     end
+    jinfo.results = results
     println((recs == 0) ? "no usable record in block" : "no usable record at end of block")
 end
 
@@ -97,20 +100,22 @@ function _sched()
     for procid in 1:_num_remotes()
         haskey(_feeders, procid) && !isready(_feeders[procid]) && continue
         machine, ip, hn = map(x->x[procid], _remotes)
-        (nothing == __fetch_tasks(machine, ip, hn, true)) && continue
+        (nothing == __fetch_tasks(procid, machine, ip, hn, true)) && continue
         _feeders[procid] = @async _push_to_worker(procid)
     end
 end
 
-function __fetch_tasks(machine::String, ip::String, hn::String, peek::Bool=false)
+function __fetch_tasks(proc_id::Int, machine::String, ip::String, hn::String, peek::Bool=false)
     global _machine_jobparts
+    global _procid_jobparts
     global _jobpart_machines
 
     v = nothing
-    haskey(_machine_jobparts, machine) && (v = _machine_jobparts[machine])
+    haskey(_procid_jobparts, proc_id) && (v = _procid_jobparts[proc_id])
+    ((v == nothing) || (0 == length(v))) && haskey(_machine_jobparts, machine) && (v = _machine_jobparts[machine])
     ((v == nothing) || (0 == length(v))) && haskey(_machine_jobparts, ip) && (v = _machine_jobparts[ip])
-    ((v == nothing)  || (0 == length(v))) && haskey(_machine_jobparts, hn) && (v = _machine_jobparts[hn])
-    ((v == nothing)  || (0 == length(v))) && return nothing
+    ((v == nothing) || (0 == length(v))) && haskey(_machine_jobparts, hn) && (v = _machine_jobparts[hn])
+    ((v == nothing) || (0 == length(v))) && return nothing
 
     peek && (return ((length(v) > 0) ? length(v) : nothing))
 
@@ -118,9 +123,11 @@ function __fetch_tasks(machine::String, ip::String, hn::String, peek::Bool=false
     jobpart = shift!(v)
 
     # unschedule from other machines
-    other_macs = delete!(_jobpart_machines, jobpart)
-    for mac in other_macs
-        filter!(x->(x != jobpart), _machine_jobparts[mac])
+    if(haskey(_jobpart_machines, jobpart))
+        other_macs = delete!(_jobpart_machines, jobpart)
+        for mac in other_macs
+            filter!(x->(x != jobpart), _machine_jobparts[mac])
+        end
     end
 
     jobpart
@@ -134,14 +141,14 @@ function _push_to_worker(procid)
 
     while(true)
         # if no tasks, exit task
-        jobpart = __fetch_tasks(machine, ip, hn)
+        jobpart = __fetch_tasks(procid, machine, ip, hn)
         (jobpart == nothing) && return
        
         # TODO: jobpart may be a command as well 
-        jid, fname, blk_id = jobpart
+        jid, blk_url = jobpart
 
         # call method at worker
-        x = remotecall_fetch(procid, HDFS._worker_map_chunk, jid, fname, blk_id)
+        x = remotecall_fetch(procid, HDFS._worker_map_chunk, jid, blk_url)
 
         # update the job id
         j = _job_store[jid] 
@@ -172,9 +179,9 @@ end
 ##
 # Job store and scheduler
 type HdfsJobSchedInfo
-    source_spec::MRSource                                   # url or url with wildcard or job_id
-    source::Union(Int,Vector)                               # job_id, file or list of files
-    fblk_hosts::Dict{String, Vector{Vector{String}}}        # block distribution for source files
+    source_spec::MRSource                                   # job_id or url (optionally with wildcard)
+    source::Union(JobId,Vector)                             # job_id or list of files
+    dist_info::Any                                          # block distribution for source files
     num_parts::Int
     num_parts_done::Int
     state::Int
@@ -182,9 +189,7 @@ type HdfsJobSchedInfo
 end
 
 type HdfsJobRunInfo
-    rdr::Union(HdfsReader,Nothing)
-    next_rec_pos::Int64
-    rec::Union(Any,Nothing)
+    rdr::Union(HdfsReader,MapResultReader)
     results::Union(Any,Nothing)
 end
 
@@ -197,7 +202,12 @@ type HdfsJobCtx
     info::Union(HdfsJobRunInfo, HdfsJobSchedInfo)           # holds sched info at master node and run info at worker nodes
 
     # constructor at the scheduler end
-    function HdfsJobCtx(source::MRSource, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+    # TODO: handle jobid
+    function HdfsJobCtx(source::JobId, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+        new(fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobSchedInfo(source, source, [], _num_remotes(), 0, STATE_STARTING, nothing))
+    end
+
+    function HdfsJobCtx(source::String, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
         # break up source to host, port, file path
         comps = urlparse(source)
         uname = username(comps)
@@ -205,7 +215,6 @@ type HdfsJobCtx
         portnum = port(comps)
         fname = comps.url
 
-        # TODO: handle jobid
         # TODO: handle wild cards
         fs = (nothing == uname) ? hdfs_connect(hname, portnum) : hdfs_connect_as_user(hname, portnum, uname)
         d = Dict{String, Vector{Vector{String}}}()
@@ -217,8 +226,10 @@ type HdfsJobCtx
 
     # constructor at the worker end
     function HdfsJobCtx(rdr_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
-        rdr = (rdr_typ == HdfsReader) ? HdfsReader() : nothing
-        new(fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobRunInfo(rdr,0,nothing,nothing))
+        rdr = nothing
+        (rdr_typ == HdfsReader) && (rdr = HdfsReader())
+        (rdr_typ == MapResultReader) && (rdr = MapResultReader())
+        new(fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobRunInfo(rdr,nothing))
     end
 end
 
@@ -226,6 +237,7 @@ const _def_wrkr_job_store = Dict{JobId, HdfsJobCtx}()
 const _job_store = Dict{JobId, HdfsJobCtx}()
 const _jobpart_machines = Dict{Tuple,Vector{ASCIIString}}()
 const _machine_jobparts = Dict{ASCIIString, Vector{Tuple}}()
+const _procid_jobparts = Dict{Int, Vector{Tuple}}()
 
 const STATE_ERROR = 0
 const STATE_STARTING = 1
@@ -242,17 +254,36 @@ function __remap_macs_to_procs(macs)
     available_macs
 end
 
-function _distribute(jid::JobId, j::HdfsJobCtx)
+function _distribute(jid::JobId, j::HdfsJobCtx, rdr_typ::DataType)
+    (rdr_typ == HdfsReader) && (return _distribute_hdfs_file(jid, j))
+    (rdr_typ == MapResultReader) && (return _distribute_map_result(jid, j))
+end
+
+function _distribute_map_result(jid::JobId, j::HdfsJobCtx)
+    global _procid_jobparts
+
+    sch::HdfsJobSchedInfo = j.info
+    for procid in 1:_num_remotes()
+        t = (jid, string(sch.source))
+        try
+            push!(_procid_jobparts[mac], t)
+        catch
+            _procid_jobparts[procid] = [t]
+        end
+    end
+end
+
+function _distribute_hdfs_file(jid::JobId, j::HdfsJobCtx)
     global _jobpart_machines
     global _machine_jobparts
 
     sch::HdfsJobSchedInfo = j.info
     for fname in sch.source
-        blk_dist = sch.fblk_hosts[fname]
+        blk_dist = sch.dist_info[fname]
         for blk_id in 1:length(blk_dist)
             macs = blk_dist[blk_id]
             macs = __remap_macs_to_procs(macs)
-            t = (jid, fname, blk_id)
+            t = (jid, string(fname, '#', blk_id))
             _jobpart_machines[t] = macs
             for mac in macs
                 # TODO: notmalize hostnames to ips
@@ -277,6 +308,7 @@ function mapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, fn
     jid = _next_job_id()
     _job_store[jid] = j
 
+    rdr_typ = isa(source, JobId) ? MapResultReader : HdfsReader
     @async begin
         try 
             # init job at all workers
@@ -286,7 +318,7 @@ function mapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, fn
                         try 
                             println("initializing job $jid at $procid")
                             # TODO: look at source and assign appropriate open method
-                            remotecall_wait(procid, HDFS._worker_init_job, jid, HdfsReader, fn_find_rec, fn_map, fn_collect, fn_reduce)
+                            remotecall_wait(procid, HDFS._worker_init_job, jid, rdr_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
                             println("initialized job $jid at $procid")
                         catch
                             println("error initializing job $jid at $procid")
@@ -298,7 +330,7 @@ function mapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, fn
 
             # once created at all workers...
             println("distributing blocks for job $jid")
-            _distribute(jid, j)
+            _distribute(jid, j, rdr_typ)
             println("distributed blocks for job $jid")
             j.info.state = STATE_RUNNING
             _sched()

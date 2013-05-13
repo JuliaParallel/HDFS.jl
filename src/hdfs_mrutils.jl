@@ -2,18 +2,35 @@
 # A bunch of methods that can be used to assist in map-reduce jobs
 
 ##
+# generic routine to filter records from map results that of list type
+# 
+function mr_result_find_rec(jr::MapResultReaderIter, iter_status, filter_fn::FuncNone=nothing)
+    results = jr.r.results
+    (nothing == iter_status) && (iter_status = start(results))
+
+    while(!done(results, iter_status))
+        jr.rec, iter_status = next(results, iter_status)
+        ((nothing == filter_fn) || filter_fn(jr.rec)) && return iter_status
+    end
+    jr.rec = nothing
+    jr.is_done = true
+    return iter_status
+end
+
+##
 # generic routine to detect CSV type of records in a hdfs file block
 # rec_sep: record separator character
 # col_sep: column separator character
 # max_rec_bytes: maximum possible bytes in a record as a hint. (used to read past the block to complete partial records at end of block)
 # tmplt: a template to match with. irrelevant columns can be nothing. performs an exact string match.
 # read_beyond: flag used to recurse into the next block
-function hdfs_find_rec_csv(jr::HdfsReaderIter, next_rec_pos, rec_sep, col_sep, max_rec_bytes::Int, tmplt::Tuple=(), read_beyond::Bool=true)
+function hdfs_find_rec_csv(jr::HdfsReaderIter, iter_status, rec_sep, col_sep, max_rec_bytes::Int, tmplt::Tuple=(), read_beyond::Bool=true)
     rdr = jr.r
     is_begin = (rdr.begin_blk == 1) # if first block, we should not ignore the first line
     final_pos = length(rdr.cv)
     end_pos = 0
     begin_tmplt = ((length(tmplt) > 0) && (nothing != tmplt[1])) ? convert(Vector{Uint8}, tmplt[1]) : nothing
+    next_rec_pos = (nothing == iter_status) ? 1 : iter_status
 
     if(!is_begin)
         end_pos = search(rdr.cv, rec_sep, int(next_rec_pos))

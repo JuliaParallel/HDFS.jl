@@ -27,16 +27,18 @@ export  hdfs_connect, hdfs_connect_as_user,
         HdfsJobCtx, HdfsJobRunInfo, HdfsJobSchedInfo,
         JobId,
         # from hdfs_reader.jl
-        HdfsReader, read_next, reset_pos, position, eof, block_sz,
+        HdfsReader, #read_next, reset_pos, position, eof, block_sz,
         HdfsReaderIter, iterator, start, done, next, 
+        MapResultReader, MapResultReaderIter,
         # from hdfs_mrutils.jl
-        hdfs_find_rec_csv
+        hdfs_find_rec_csv, mr_result_find_rec
 
 using ChainedVectors
 using URLParse
 
 include("hdfs_types.jl")
 include("hdfs_reader.jl")
+include("map_result_reader.jl")
 include("hdfs_jobs.jl")
 include("hdfs_mrutils.jl")
 
