@@ -86,26 +86,23 @@ The results of map and collect are still distributed on every node. The reduce s
 The reduce function takes a final result instance to merge the collected results on to, which may be ‘nothing’ for the very first call to reduce. Reduce may be called multiple times if it is done in phases, distributed across nodes.
 
 
-Typical Setup and Execution:
-----------------------------
+### Typical Setup and Execution
 - Julia must be setup at identical location on all data nodes.
 - Authorized keys setup for ssh from name node machine to all data nodes
 - Typically, a job file with all map, collect, and reduce functions is loaded using `require` on the master node, which in turn loads it on all nodes.
-   `require("job\_file.jl")`
+  E.g. `require("job\_file.jl")`.
   Alternatively, if the functions are simple, anonymous functions can be passed which would get shipped to all nodes.
 - Issue one or more mapreduce commands
 - Check status and results and issue further commands
 - Save results and exit
 
 
-Test:
------
+### Test
 A few sample test scrips are provided in the test folder. The test scripts currently work on curated twitter data as provided from [infochimps](http://www.infochimps.com/datasets/twitter-census-conversation-metrics-one-year-of-urls-hashtags-sm--2)
 - twitter\_test.jl: Calculates monthly, annual and total counts of smileys.
 
 
-TODO:
------
+### TODO
 - Better scheduling of blocks across processing nodes
 - Distributed reduction step
 - Scalability improvements, e.g. multiple tasks per node, rack awareness

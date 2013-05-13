@@ -251,6 +251,11 @@ function __remap_macs_to_procs(macs)
     global _all_remote_names
 
     available_macs = filter(x->contains(_all_remote_names, x), macs)
+    # TODO: figure out a better way to handle domain names
+    if (length(available_macs) == 0) 
+        macs = map(x->split(x,".")[1], macs)
+        available_macs = filter(x->contains(_all_remote_names, x), macs)
+    end
     (length(available_macs) == 0) && push!(available_macs, "")
     available_macs
 end

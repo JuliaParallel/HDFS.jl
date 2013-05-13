@@ -76,7 +76,7 @@ end
 type HdfsReaderIter
     r::HdfsReader
     fn_find_rec::Function
-    chunk_len::Int
+    chunk_len::Int64
     rec::Union(Any,Nothing)
 end
 
