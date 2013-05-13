@@ -12,7 +12,7 @@ function mr_result_find_rec(jr::MapResultReaderIter, iter_status, filter_fn::Fun
         jr.rec, iter_status = next(results, iter_status)
         ((nothing == filter_fn) || filter_fn(jr.rec)) && return iter_status
     end
-    jr.rec = nothing
+    jr.rec = []
     jr.is_done = true
     return iter_status
 end
@@ -69,6 +69,6 @@ function hdfs_find_rec_csv(jr::HdfsReaderIter, iter_status, rec_sep, col_sep, ma
         end
     end
     jr.rec = []
-    next_rec_pos = final_pos+1
+    final_pos+1    # next rec pos is beyond final pos to indicating end
 end
 

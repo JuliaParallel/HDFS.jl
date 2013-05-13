@@ -79,6 +79,7 @@ function _worker_map_chunk(jid::JobId, chunk_url::String)
 
     results = jinfo.results
     for rec in iterator(jinfo.rdr, chunk_url, j.fn_find_rec)
+        (nothing == rec) && continue
         for mapped_rec in fn_map(rec)
             results = fn_collect(results, mapped_rec)
             recs += 1

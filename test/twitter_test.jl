@@ -13,7 +13,7 @@ find_smiley(jr::HdfsReaderIter, next_rec_pos) = hdfs_find_rec_csv(jr, next_rec_p
 ##
 # for finding total counts across all years
 function map_total(rec)
-    (length(rec) == 0) && return rec
+    ((nothing == rec) || (length(rec) == 0)) && return []
     [(rec[4], int(rec[3]))]
 end
 
@@ -47,7 +47,7 @@ end
 ##
 # for finding annual counts
 function map_yearly(rec)
-    (length(rec) == 0) && return rec
+    ((nothing == rec) || (length(rec) == 0)) && return []
 
     ts = rec[2]
     ts_year = int(ts[1:4])
@@ -91,7 +91,7 @@ map_total_from_yearly(rec) = [(rec[1], sum(rec[2]))]
 ##
 # for finding monthly counts
 function map_monthly(rec)
-    (length(rec) == 0) && return rec
+    ((nothing == rec) || (length(rec) == 0)) && return []
 
     ts = rec[2]
     ts_year = int(ts[1:4])
