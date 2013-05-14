@@ -1,7 +1,7 @@
 
 ##
 # Provides access to map results
-type MapResultReader
+type MapResultReader <: MapInputReader
     url::String
     jid::Int64
     results::Union(Any,Nothing)
@@ -27,7 +27,7 @@ end
 
 ##
 # Iterator for HdfsReader using the find_rec function
-type MapResultReaderIter
+type MapResultReaderIter <: MapInputIterator
     r::MapResultReader
     fn_find_rec::Function
     is_done::Bool

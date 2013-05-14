@@ -8,6 +8,9 @@ import  Base.show, Base.print_matrix,
         Base.search, Base.beginswith,
         Base.start, Base.done, Base.next
 
+abstract MapInputReader 
+abstract MapInputIterator
+
 export  hdfs_connect, hdfs_connect_as_user,
         hdfs_exists, hdfs_delete, 
         hdfs_flush, hdfs_get_capacity, hdfs_get_default_block_size, hdfs_get_path_info, hdfs_get_used, 
@@ -23,13 +26,12 @@ export  hdfs_connect, hdfs_connect_as_user,
         HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
         # from hdfs_jobs.jl
         results, status, mapreduce, unload,
-        STATE_STARTING, STATE_RUNNING, STATE_COMPLETE, STATE_ERROR,
         HdfsJobCtx, HdfsJobRunInfo, HdfsJobSchedInfo,
         JobId,
         # from hdfs_reader.jl
-        HdfsReader, #read_next, reset_pos, position, eof, block_sz,
-        HdfsReaderIter, iterator, start, done, next, 
+        HdfsReader, HdfsReaderIter, 
         MapResultReader, MapResultReaderIter,
+        iterator, start, done, next, 
         # from hdfs_mrutils.jl
         hdfs_find_rec_csv, mr_result_find_rec
 

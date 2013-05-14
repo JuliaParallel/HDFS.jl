@@ -6,6 +6,7 @@
 # 
 function mr_result_find_rec(jr::MapResultReaderIter, iter_status, filter_fn::FuncNone=nothing)
     results = jr.r.results
+    (nothing == results) && (jr.is_done = true) && (return nothing)
     (nothing == iter_status) && (iter_status = start(results))
 
     while(!done(results, iter_status))

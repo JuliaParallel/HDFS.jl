@@ -1,7 +1,7 @@
 ##
 # HdfsReader encapsulates block reads from a HDFS file
 # Initialized to start from any block, further blocks/bytes can be read from there.
-type HdfsReader
+type HdfsReader <: MapInputReader
     url::String
     begin_blk::Int
     cv::ChainedVector{Uint8}
@@ -73,7 +73,7 @@ end
 
 ##
 # Iterator for HdfsReader using the find_rec function
-type HdfsReaderIter
+type HdfsReaderIter <: MapInputIterator
     r::HdfsReader
     fn_find_rec::Function
     chunk_len::Int64

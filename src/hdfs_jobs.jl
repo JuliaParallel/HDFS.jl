@@ -190,7 +190,7 @@ type HdfsJobSchedInfo
 end
 
 type HdfsJobRunInfo
-    rdr::Union(HdfsReader,MapResultReader)
+    rdr::MapInputReader 
     results::Union(Any,Nothing)
 end
 
