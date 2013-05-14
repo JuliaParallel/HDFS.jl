@@ -6,7 +6,8 @@ import  Base.show, Base.print_matrix,
         Base.getindex, Base.setindex!,
         Base.push!, Base.pop!, Base.shift!, Base.empty!,
         Base.search, Base.beginswith,
-        Base.start, Base.done, Base.next
+        Base.start, Base.done, Base.next,
+        Base.wait
 
 abstract MapInputReader 
 abstract MapInputIterator
@@ -25,7 +26,7 @@ export  hdfs_connect, hdfs_connect_as_user,
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
         HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
         # from hdfs_jobs.jl
-        results, status, mapreduce, unload,
+        results, status, mapreduce, unload, wait,
         HdfsJobCtx, HdfsJobRunInfo, HdfsJobSchedInfo,
         JobId,
         # from hdfs_reader.jl

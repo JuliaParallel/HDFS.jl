@@ -41,13 +41,18 @@ TODO: return a percent completion indicator
 **results**( *jobid* ) &rarr; ( *status* , *result* )
 Returns a tuple of the current status and the reduced result (if present). The result would be set to 'nothing' if there was no reducer of if there was an error.
 TODO:
-- wait(jobid): Waits for job to complete
 - store(jobid, path): If complete, store the results either in distributed or local form at the given path. Path may point to hdfs:// or file://. Results would be distributed if there was no reduce step.
 - load(jobid, path, everywhere=false, reducer=nothing): If stored job present, load stored results to memory. 
     - If results were stored in reduced form, they will be loaded to local node only. Else they are loaded in distributed form on multiple nodes.
     - If results were distributed, all results can be still be loaded at all nodes by specifying everywhere with a reduction function. The distributed results would then be reduced, stored and reduced data sent to all nodes. Henceforth, either load or load\_everywhere may be called without additional reduction step overhead.
 - unload(jobid, store/destroy): Unload task from memory. In addition, can optionally be stored to disk or destroyed permanently.
 
+**wait**( *jobid* ) &rarr; *status_code*
+Waits for a job to finish. Return status code could be one of:
+- 0: error (could be result of an error in the job that was the input to this job)
+- 1: starting
+- 2: running
+- 3: complete 
 
 
 #### Data sources and the reader function
@@ -90,7 +95,7 @@ The reduce function takes a final result instance to merge the collected results
 - Julia must be setup at identical location on all data nodes.
 - Authorized keys setup for ssh from name node machine to all data nodes
 - Typically, a job file with all map, collect, and reduce functions is loaded using `require` on the master node, which in turn loads it on all nodes.
-  E.g. `require("job\_file.jl")`.
+  E.g. `require("job_file.jl")`.
   Alternatively, if the functions are simple, anonymous functions can be passed which would get shipped to all nodes.
 - Issue one or more mapreduce commands
 - Check status and results and issue further commands
@@ -98,8 +103,8 @@ The reduce function takes a final result instance to merge the collected results
 
 
 ### Test
-A few sample test scrips are provided in the test folder. The test scripts currently work on curated twitter data as provided from [infochimps](http://www.infochimps.com/datasets/twitter-census-conversation-metrics-one-year-of-urls-hashtags-sm--2)
-- twitter\_test.jl: Calculates monthly, annual and total counts of smileys.
+A sample test script is provided in the test folder that works on curated twitter data as provided at [infochimps](http://www.infochimps.com/datasets/twitter-census-conversation-metrics-one-year-of-urls-hashtags-sm--2)
+- twitter\_test.jl: Calculates monthly, annual and total counts of smileys. Compares smiley occurrences. Comments in the file contain instructions to run the steps.
 
 
 ### TODO
