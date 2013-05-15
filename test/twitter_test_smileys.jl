@@ -16,39 +16,39 @@
 #    this would demonstrate how we can use results from earlier maps in further map-reduce operations.
 #
 #    first, get a monthly summary
-#    julia> j1 = mapreduce("/twitter_daily_summary.tsv", find_smiley, map_monthly, collect_monthly)
+#    julia> j_mon = mapreduce("/twitter_daily_summary.tsv", find_smiley, map_monthly, collect_monthly)
 #
 #    next, once the above is done, get a yearly summary from the monthly data
-#    julia> j2 = mapreduce(j1, find_monthly, map_yearly_from_monthly, collect_yearly)
+#    julia> j2 = mapreduce(j_mon, find_monthly, map_yearly_from_monthly, collect_yearly)
 #
 #    last, when the obove is done, get the total counts from the yearly data
 #    we also have a reduce step here to get the final result on to the master node
 #    julia> j_fin = mapreduce(j2, find_yearly, map_total_from_yearly, collect_total, reduce_total)
 #
-#    the above three steps can of course as well be done at one go by:
+#    if we didn't need the monthly summary, the yearly summary could have been gotten more efficiently as:
 #    julia> j_fin = mapreduce("/twitter_daily_summary.tsv", find_smiley, map_total, collect_total, reduce_total)
 #
-#    let's get the monthly totals for plotting a trend:
-#    julia> j_mon = mapreduce("/twitter_daily_summary.tsv", find_smiley, map_monthly, collect_monthly, reduce_monthly)
-#
 # 5. get the total result out
+#    julia> wait(j_fin)
 #    julia> smileys = results(j_fin)[2]
+#    julia> happy_smileys = [":)", ":=)", "=)", "-)", ":-)", "(:", "(=:", "(=", "(-", "(-:"]
+#    julia> sad_smileys = [":(", ":=(", "=(", "-(", ":-(", "):", ")=:", ")=", ")-", ")-:"]
 # 6. count the happy and not_so_happy tweets
-#    julia> happy = sum(map(x->get(smileys, x, 0), [":)", ":=)", "=)", "(:", "(=:", "(="]))
-#    julia> sad = sum(map(x->get(smileys, x, 0), [":(", ":=(", "=(", "):", ")=:", ")="]))
+#    julia> happy = sum(map(x->get(smileys, x, 0), happy_smileys))
+#    julia> sad = sum(map(x->get(smileys, x, 0), sad_smileys))
 #    julia> println("people tweet more when they are ", (happy > sad) ? "happy":"sad")
 #
 # 7. get the monthly result out
 #    julia> smileys = results(j_mon)[2]
 # 8. count the happy and not_so_happy tweets
-#    julia> happy = sum(map(x->get(smileys, x, zeros(Int,12*5)), [":)", ":=)", "=)", "(:", "(=:", "(="]))
-#    julia> sad = sum(map(x->get(smileys, x, zeros(Int,12*5)), [":(", ":=(", "=(", "):", ")=:", ")="]))
+#    julia> happy = sum(map(x->get(smileys, x, zeros(Int,12*5)), happy_smileys))
+#    julia> sad = sum(map(x->get(smileys, x, zeros(Int,12*5)), sad_smileys))
 #    julia> hq = map(x->(sad[x]>0)?(happy[x]/sad[x]):'?', 1:length(happy))
 #    julia> println("twitter happiness quotient:")
 #    julia> println(hq)
 
 using HDFS
-
+using Gaston
 
 ##
 # find smiley records from HDFS CSV file
@@ -188,5 +188,44 @@ function map_yearly_from_monthly(rec)
 end
 
  
+function do_smiley_tests(furl::String)
+    println("starting mapreduce jobs...")
+    j_mon = mapreduce(furl, find_smiley, map_monthly, collect_monthly, reduce_monthly)
+    j2 = mapreduce(j_mon, find_monthly, map_yearly_from_monthly, collect_yearly)
+    j_fin = mapreduce(j2, find_yearly, map_total_from_yearly, collect_total, reduce_total)
 
- 
+    println("waiting for jobs to finish...")
+    wait(j_fin)
+    println("time taken (total time, wait time, run time):")
+    println("\tmapreduce daily to monthly: $(times(j_mon))")
+    println("\tmap monthly to yearly:      $(times(j2))")
+    println("\tmapreduce yearly to total:  $(times(j_fin))")
+    println("")
+    println("results:")
+    smileys = results(j_fin)[2]
+    happy_smileys = [":)", ":=)", "=)", "-)", ":-)", "(:", "(=:", "(=", "(-", "(-:"]
+    sad_smileys = [":(", ":=(", "=(", "-(", ":-(", "):", ")=:", ")=", ")-", ")-:"]
+
+    happy = sum(map(x->get(smileys, x, 0), happy_smileys))
+    sad = sum(map(x->get(smileys, x, 0), sad_smileys))
+    println("people tweet more when they are ", (happy > sad) ? "happy":"sad")
+
+    smileys = results(j_mon)[2]
+    happy = sum(map(x->get(smileys, x, zeros(Int,12*5)), happy_smileys))
+    sad = sum(map(x->get(smileys, x, zeros(Int,12*5)), sad_smileys))
+    hq = map(x->(sad[x]>0)?(happy[x]/sad[x]):0.0, 1:length(happy))
+    hq = convert(Array{Float64,1}, hq)
+    println("twitter happiness quotient:")
+    println(hq[6:46])
+    println("plot coming up...")
+    set_terminal("x11")
+    plot(hq[6:46], 
+           "color","blue",
+           "marker","ecircle",
+           "linewidth",2,
+           "pointsize",1.1,
+           "title","twitter happiness index",
+           "xlabel","months",
+           "ylabel","): | (:",
+           "box","inside horizontal left top")
+end 

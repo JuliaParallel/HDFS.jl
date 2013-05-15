@@ -408,4 +408,10 @@ function unload(jid::JobId)
     jid
 end 
 
+function times(jid::JobId)
+    global _job_store
+    j = _job_store[jid]
+    ji = j.info 
+    ((ji.end_time - ji.begin_time), (ji.sched_time - ji.begin_time), (ji.end_time - ji.sched_time))
+end
 

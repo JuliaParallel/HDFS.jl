@@ -29,6 +29,7 @@ Returns a job id which can be used to reference this job.
 
 
 **status**( *jobid* ) &rarr; *status_string*
+
 The status string could be one of:
 - *starting*: the job is getting initialized. (may be waiting for the results of another running job)
 - *running*: has been scheduled
@@ -38,7 +39,9 @@ The status string could be one of:
 TODO: return a percent completion indicator
 
 
+
 **results**( *jobid* ) &rarr; ( *status* , *result* )
+
 Returns a tuple of the current status and the reduced result (if present). The result would be set to 'nothing' if there was no reducer of if there was an error.
 TODO:
 - store(jobid, path): If complete, store the results either in distributed or local form at the given path. Path may point to hdfs:// or file://. Results would be distributed if there was no reduce step.
@@ -47,7 +50,10 @@ TODO:
     - If results were distributed, all results can be still be loaded at all nodes by specifying everywhere with a reduction function. The distributed results would then be reduced, stored and reduced data sent to all nodes. Henceforth, either load or load\_everywhere may be called without additional reduction step overhead.
 - unload(jobid, store/destroy): Unload task from memory. In addition, can optionally be stored to disk or destroyed permanently.
 
+
+
 **wait**( *jobid* ) &rarr; *status_code*
+
 Waits for a job to finish. Return status code could be one of:
 - 0: error (could be result of an error in the job that was the input to this job)
 - 1: starting
@@ -57,6 +63,8 @@ Waits for a job to finish. Return status code could be one of:
 
 #### Data sources and the reader function
 Access to data sources are provided by lower level reader types, specific to each source. In the current implementation **HDFSFileReader** provides functionality to read HDFS files and **MapResultReader** assists reading previous map results. The supplied reader\_fn uses a reader instance to fetch data, and returns only interesting data for the mapper. The reader and the reader\_fn are combined to form an iterator that feeds the map function.
+
+
 
 **reader**( *iterator* , *state* ) &rarr; *state*
 

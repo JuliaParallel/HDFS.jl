@@ -26,7 +26,7 @@ export  hdfs_connect, hdfs_connect_as_user,
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
         HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
         # from hdfs_jobs.jl
-        results, status, mapreduce, unload, wait,
+        results, status, mapreduce, unload, wait, times,
         HdfsJobCtx, HdfsJobRunInfo, HdfsJobSchedInfo,
         JobId,
         # from hdfs_reader.jl
