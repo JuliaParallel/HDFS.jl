@@ -317,7 +317,8 @@ function _distribute_hdfs_file(jid::JobId, j::HdfsJobCtx)
     end
 end
 
-function mapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone=nothing)
+dmap(source::MRSource, fn_find_rec::Function, fn_map::Function, fn_collect::Function) = dmapreduce(source, fn_find_rec, fn_map, fn_collect, nothing)
+function dmapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
     global _remotes
     global _job_store
     global _debug

@@ -3,7 +3,7 @@ using Gaston
 
 ##
 # find smiley records from HDFS CSV file
-find_count_of_typ(jr::HdfsReaderIter, next_rec_pos, ttyp::String) = hdfs_find_rec_csv(jr, next_rec_pos, '\n', '\t', 1024, (ttyp, nothing, nothing, nothing))
+find_count_of_typ(jr::HdfsReaderIter, next_rec_pos, ttyp::String) = HDFS.hdfs_find_rec_csv(jr, next_rec_pos, '\n', '\t', 1024, (ttyp, nothing, nothing, nothing))
 
 function map_count_monthly(rec, tag::Regex)
     ((nothing == rec) || (length(rec) == 0) || !ismatch(tag, rec[4])) && return []
@@ -34,23 +34,13 @@ function collect_count_monthly(results, rec)
     results
 end
 
-function reduce_count_monthly(reduced, results...)
-    (nothing == reduced) && (reduced = Dict{String, Vector{Int}}())
-    
-    for d in results
-        (nothing == d) && continue
-        for (hashtag,monthly) in d
-            haskey(reduced, hashtag) ? (reduced[hashtag] += monthly) : (reduced[hashtag] = monthly)
-        end
-    end
-    reduced
-end
+reduce_count_monthly(reduced, results...) = HDFS.reduce_dicts(+, reduced, results...)
 
 function do_plot_counts(furl::String, typ::String, tag::String)
-    println("starting mapreduce...")
-    j_mon = mapreduce(furl, (x,y)->find_count_of_typ(x,y,typ), x->map_count_monthly(x, Regex(tag)), collect_count_monthly, reduce_count_monthly)
+    println("starting dmapreduce...")
+    j_mon = dmapreduce(furl, (x,y)->find_count_of_typ(x,y,typ), x->map_count_monthly(x, Regex(tag)), collect_count_monthly, reduce_count_monthly)
 
-    println("waiting for mapreduce to finish...")
+    println("waiting for dmapreduce to finish...")
     wait(j_mon)
     println("time taken (total time, wait time, run time): $(times(j_mon))")
     println("")

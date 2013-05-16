@@ -6,9 +6,10 @@ It also provides a simple parallel map-reduce functionality, as explained in the
 
 ### The HDFS Map Reduce Interface
 
-**mapreduce**( *data_source* , *reader_fn* , *map_fn* , *collect_fn* , *reduce_fn* ) &rarr; *jobid*
+**dmap**( *data_source* , *reader_fn* , *map_fn* , *collect_fn* ) &rarr; *jobid*
+**dmapreduce**( *data_source* , *reader_fn* , *map_fn* , *collect_fn* , *reduce_fn* ) &rarr; *jobid*
 
-Submits a map-reduce job. 
+Submits a distributed map or map-reduce job. 
 Returns a job id which can be used to reference this job.
 
 **Parameters:**
@@ -24,7 +25,7 @@ Returns a job id which can be used to reference this job.
     - aggregates the mapped record into a storage area.
 - reduce\_fn:
     - reduces multiple collected records to output the final result.
-    - reduce\_fn is optional, if omitted, the collected results are left in distributed memory across the nodes and can be referred to by a subsequent run.
+    - reduce\_fn is not required for a pure map operation. The collected results are then left in distributed memory across the nodes and can be referred to by a subsequent run.
 
 
 

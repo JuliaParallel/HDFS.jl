@@ -1,12 +1,6 @@
 module HDFS
 
-import  Base.show, Base.print_matrix,
-        Base.size, Base.strides, Base.stride,
-        Base.similar,
-        Base.getindex, Base.setindex!,
-        Base.push!, Base.pop!, Base.shift!, Base.empty!,
-        Base.search, Base.beginswith,
-        Base.start, Base.done, Base.next,
+import  Base.start, Base.done, Base.next,
         Base.wait
 
 abstract MapInputReader 
@@ -26,15 +20,13 @@ export  hdfs_connect, hdfs_connect_as_user,
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
         HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
         # from hdfs_jobs.jl
-        results, status, mapreduce, unload, wait, times,
+        dmap, dmapreduce, results, status, unload, wait, times,
         HdfsJobCtx, HdfsJobRunInfo, HdfsJobSchedInfo,
         JobId,
         # from hdfs_reader.jl
         HdfsReader, HdfsReaderIter, 
         MapResultReader, MapResultReaderIter,
-        iterator, start, done, next, 
-        # from hdfs_mrutils.jl
-        hdfs_find_rec_csv, mr_result_find_rec
+        iterator, start, done, next
 
 using ChainedVectors
 using URLParse

@@ -1,6 +1,36 @@
 ##
 # A bunch of methods that can be used to assist in map-reduce jobs
 
+## 
+# generic reduce functions
+function reduce_dicts(op::Function, result, results...)
+    for d in results
+        (nothing == result) && (result = similar(d))
+        for (k,v) in d
+            haskey(result, k) ? op(result[k],v) : (result[k] = v)
+        end
+    end
+    result
+end
+
+##
+# generic collect functions 
+collect_in_vector(results, rec) = (nothing == results) ? [rec] : push!(results, rec)
+collect_in_set(results, rec) = (nothing == results) ? Set(rec) : add!(results, rec)
+function collect_in_dict(op::Function, results, rec)
+    (nothing == rec) && return results
+    k,v = rec
+    if(nothing == results) 
+        results = Dict{typeof(k),typeof(v)}()
+        results[k] = v
+        return results
+    end
+    !haskey(results, k) && (results[k]=v; return results)
+    results[k] = op(v,results[k])
+    results
+end
+
+
 ##
 # generic routine to filter records from map results that of list type
 # 
