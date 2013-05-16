@@ -61,12 +61,21 @@ Waits for a job to finish. Return status code could be one of:
 - 3: complete 
 
 
+**times**( *jobid* ) &rarr; ( *total_time* , *wait_time* , *run_time* )
+
+For a completed job, returns the time (seconds) it took:
+- total\_time: overall time taken
+- wait\_time: time till which the job was not scheduled (possibly waiting for a input job to finish)
+- run\_time: time taken after the job was scheduled 
+
+
+
 #### Data sources and the reader function
 Access to data sources are provided by lower level reader types, specific to each source. In the current implementation **HDFSFileReader** provides functionality to read HDFS files and **MapResultReader** assists reading previous map results. The supplied reader\_fn uses a reader instance to fetch data, and returns only interesting data for the mapper. The reader and the reader\_fn are combined to form an iterator that feeds the map function.
 
 
 
-**reader**( *iterator* , *state* ) &rarr; *state*
+**reader_fn**( *iterator* , *state* ) &rarr; *state*
 
 The reader function essentially provides the logic for the iterator in a single function:
 - the lower level reader instance with the data if made available to the function
@@ -81,11 +90,11 @@ The reader function essentially provides the logic for the iterator in a single 
 #### Map and Collect
 Map takes as input the record as provided by the reader function and returns a list of zero or more map results.
 
-**map**( *record* ) &rarr; *[records...]*
+**map_fn**( *record* ) &rarr; *[records...]*
 
 Collect is an intermediate step between map and reduce that helps collate results from map into a more compact form. The collect method can also be used as an intermediate reduce step.
 
-**collect**( *result* , *record* ) &rarr; *result*
+**collect_fn**( *result* , *record* ) &rarr; *result*
 
 The result of the map and collect operations are stored in memory by default. If necessary, the collect (and map) operations can use permanent storage and just return references to the location where the objects are stored.
 
@@ -94,7 +103,7 @@ The result of the map and collect operations are stored in memory by default. If
 #### Reduce
 The results of map and collect are still distributed on every node. The reduce step gathers and combines all these distributed results on to the central node.
 
-**reduce**( *result* , *results...* ) &rarr; *result*
+**reduce_fn**( *result* , *results...* ) &rarr; *result*
 
 The reduce function takes a final result instance to merge the collected results on to, which may be ‘nothing’ for the very first call to reduce. Reduce may be called multiple times if it is done in phases, distributed across nodes.
 
@@ -111,8 +120,9 @@ The reduce function takes a final result instance to merge the collected results
 
 
 ### Test
-A sample test script is provided in the test folder that works on curated twitter data as provided at [infochimps](http://www.infochimps.com/datasets/twitter-census-conversation-metrics-one-year-of-urls-hashtags-sm--2)
-- twitter\_test.jl: Calculates monthly, annual and total counts of smileys. Compares smiley occurrences. Comments in the file contain instructions to run the steps.
+A sample test script is provided in the test folder that works on curated twitter data as provided at [infochimps](http://www.infochimps.com/datasets/twitter-census-conversation-metrics-one-year-of-urls-hashtags-sm--2). Comments in the files contain instructions to run the steps.
+- twitter\_test\_smileys.jl: Calculates monthly, annual and total counts of smileys. Compares smiley occurrences.
+- twitter\_test\_counts.jl: Calculates monthly counts of a search term (regex).
 
 
 ### TODO

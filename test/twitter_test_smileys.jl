@@ -8,11 +8,17 @@
 # 1. bring up julia on all hadoop data nodes
 #       julia --machinefile ${HADOOP_HOME}/conf/slaves
 # 2. load this file (assuming file present in cwd)
-#       julia> require("twitter_test.jl")
+#       julia> require("twitter_test_smileys.jl")
 # 3. we would use the daily twitter summary data from infochimps 
 #    data source: http://www.infochimps.com/datasets/twitter-census-conversation-metrics-one-year-of-urls-hashtags-sm--2
 #    ensure that the daily summary file is available at /twitter_daily_summary.tsv
-# 4. let's count the smiley occurences in stages (monthly, yearly, total).
+#
+# 4. run the test function
+#    julia> do_smiley_tests("/twitter_daily_summary.tsv")
+#
+#    or, follow the steps below to do it step by step (or if graphics support is not available for plots)
+#
+# 5. let's count the smiley occurences in stages (monthly, yearly, total).
 #    this would demonstrate how we can use results from earlier maps in further map-reduce operations.
 #
 #    first, get a monthly summary
@@ -28,24 +34,25 @@
 #    if we didn't need the monthly summary, the yearly summary could have been gotten more efficiently as:
 #    julia> j_fin = mapreduce("/twitter_daily_summary.tsv", find_smiley, map_total, collect_total, reduce_total)
 #
-# 5. get the total result out
+# 6. get the total result out
 #    julia> wait(j_fin)
 #    julia> smileys = results(j_fin)[2]
 #    julia> happy_smileys = [":)", ":=)", "=)", "-)", ":-)", "(:", "(=:", "(=", "(-", "(-:"]
 #    julia> sad_smileys = [":(", ":=(", "=(", "-(", ":-(", "):", ")=:", ")=", ")-", ")-:"]
-# 6. count the happy and not_so_happy tweets
+# 7. count the happy and not_so_happy tweets
 #    julia> happy = sum(map(x->get(smileys, x, 0), happy_smileys))
 #    julia> sad = sum(map(x->get(smileys, x, 0), sad_smileys))
 #    julia> println("people tweet more when they are ", (happy > sad) ? "happy":"sad")
 #
-# 7. get the monthly result out
+# 8. get the monthly result out
 #    julia> smileys = results(j_mon)[2]
-# 8. count the happy and not_so_happy tweets
+# 9. count the happy and not_so_happy tweets
 #    julia> happy = sum(map(x->get(smileys, x, zeros(Int,12*5)), happy_smileys))
 #    julia> sad = sum(map(x->get(smileys, x, zeros(Int,12*5)), sad_smileys))
 #    julia> hq = map(x->(sad[x]>0)?(happy[x]/sad[x]):'?', 1:length(happy))
 #    julia> println("twitter happiness quotient:")
 #    julia> println(hq)
+# 10. plot the results 
 
 using HDFS
 using Gaston
