@@ -7,6 +7,7 @@ It also provides a simple parallel map-reduce functionality, as explained in the
 ### The HDFS Map Reduce Interface
 
 **dmap**( *data_source* , *reader_fn* , *map_fn* , *collect_fn* ) &rarr; *jobid*
+
 **dmapreduce**( *data_source* , *reader_fn* , *map_fn* , *collect_fn* , *reduce_fn* ) &rarr; *jobid*
 
 Submits a distributed map or map-reduce job. 
