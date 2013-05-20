@@ -163,7 +163,15 @@ function do_smiley_tests(furl::String)
     println("\tdmapreduce yearly to total:  $(times(j_fin))")
     println("")
     println("results:")
-    smileys = results(j_fin)[2]
+    jstatus,smileys = results(j_fin)
+
+    if(jstatus != "complete")
+        println("unsuccessful")
+        println("\tdmapreduce daily to monthly: $(status(j_mon, true))")
+        println("\tdmap monthly to yearly:      $(status(j2, true))")
+        println("\tdmapreduce yearly to total:  $(status(j_fin, true))")
+        return
+    end
 
     ss = {}
     for (n,v) in smileys push!(ss,(n,v)) end

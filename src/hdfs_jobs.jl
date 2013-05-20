@@ -50,7 +50,8 @@ end
 function _worker_init_job(jid::JobId, rdr_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
     global _job_store
     global _def_wrkr_job_store
-    ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid] = HdfsJobCtx(rdr_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
+    ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid] = HdfsJobCtx(jid, rdr_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
+    jid
 end
 
 function _worker_unload(jid::JobId)
@@ -89,6 +90,7 @@ function _worker_map_chunk(jid::JobId, chunk_url::String)
     end
     jinfo.results = results
     _debug && println((recs == 0) ? "no usable record in block" : "no usable record at end of block")
+    recs
 end
 
 
@@ -151,28 +153,35 @@ function _push_to_worker(procid)
         jid, blk_url = jobpart
 
         # call method at worker
+        _debug && println("calling procid $(procid) for jobid $(jid) with url $(blk_url)")
         x = remotecall_fetch(procid, HDFS._worker_map_chunk, jid, blk_url)
+        _debug && println("returned from call to procid $(procid) for jobid $(jid) with url $(blk_url)")
 
         # update the job id
         j = _job_store[jid] 
-        if(isa(x, Exception))
-            _set_status(j, STATE_ERROR)
+        (j.info.state == STATE_ERROR) && continue
+
+        if(!isa(x, Integer))
+            _set_status(j, STATE_ERROR, x)
         else
+            _debug && println("num records mapped: $(x)")
             j.info.num_parts_done += 1
         end
-        if(j.info.num_parts == j.info.num_parts_done)
+
+        if((j.info.state != STATE_ERROR) && (j.info.num_parts == j.info.num_parts_done))
             try
                 if(j.fn_reduce != nothing)
                     # do the reduce step
                     # TODO: distributed reduction and not plugged in at this place
                     for procid in 1:_num_remotes()
                         red = remotecall_fetch(procid, HDFS._worker_fetch_collected, jid)
+                        isa(red,Exception) && throw(red)
                         j.info.red = j.fn_reduce(j.info.red, red)
                     end
                 end
                 _set_status(j, STATE_COMPLETE)
-            catch
-                _set_status(j, STATE_ERROR)
+            catch ex
+                _set_status(j, STATE_ERROR, ex)
             end
         end
     end
@@ -188,23 +197,25 @@ type HdfsJobSchedInfo
     num_parts::Int
     num_parts_done::Int
     state::Int
-    red::Union(Any,Nothing)
+    state_info::Any
+    red::Any
     trigger::RemoteRef
     begin_time::Float64                                     # submitted
     sched_time::Float64                                     # scheduled (after dependent jobs finish)
     end_time::Float64                                       # completed
 
     function HdfsJobSchedInfo(source_spec::MRSource, source::Union(JobId,Vector), dist_info::Any, num_parts::Int)
-        new(source_spec, source, dist_info, num_parts, 0, STATE_STARTING, nothing, RemoteRef(), time(), 0.0, 0.0)
+        new(source_spec, source, dist_info, num_parts, 0, STATE_STARTING, nothing, nothing, RemoteRef(), time(), 0.0, 0.0)
     end
 end
 
 type HdfsJobRunInfo
     rdr::MapInputReader 
-    results::Union(Any,Nothing)
+    results::Any
 end
 
 type HdfsJobCtx
+    jid::JobId
     fn_find_rec::Function
     fn_map::Function
     fn_collect::Function
@@ -213,12 +224,11 @@ type HdfsJobCtx
     info::Union(HdfsJobRunInfo, HdfsJobSchedInfo)           # holds sched info at master node and run info at worker nodes
 
     # constructor at the scheduler end
-    # TODO: handle jobid
-    function HdfsJobCtx(source::JobId, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
-        new(fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobSchedInfo(source, source, [], _num_remotes()))
+    function HdfsJobCtx(jid::JobId, source::JobId, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+        new(jid, fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobSchedInfo(source, source, [], _num_remotes()))
     end
 
-    function HdfsJobCtx(source::String, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+    function HdfsJobCtx(jid::JobId, source::String, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
         # break up source to host, port, file path
         comps = urlparse(source)
         uname = username(comps)
@@ -232,15 +242,15 @@ type HdfsJobCtx
         finfo = hdfs_get_path_info(fs, fname)
         blkdist = hdfs_get_hosts(fs, fname, 0, finfo.size) 
         d[source] = blkdist
-        new(fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobSchedInfo(source, [source], d, length(blkdist)))
+        new(jid, fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobSchedInfo(source, [source], d, length(blkdist)))
     end
 
     # constructor at the worker end
-    function HdfsJobCtx(rdr_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+    function HdfsJobCtx(jid::JobId, rdr_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
         rdr = nothing
         (rdr_typ == HdfsReader) && (rdr = HdfsReader())
         (rdr_typ == MapResultReader) && (rdr = MapResultReader())
-        new(fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobRunInfo(rdr,nothing))
+        new(jid, fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobRunInfo(rdr,nothing))
     end
 end
 
@@ -280,7 +290,7 @@ function _distribute_map_result(jid::JobId, j::HdfsJobCtx)
 
     sch::HdfsJobSchedInfo = j.info
     if(STATE_COMPLETE != wait(sch.source))
-        _set_status(j, STATE_ERROR)
+        _set_status(j, STATE_ERROR, "source has errors")
         return
     end
     for procid in 1:_num_remotes()
@@ -317,6 +327,17 @@ function _distribute_hdfs_file(jid::JobId, j::HdfsJobCtx)
     end
 end
 
+function _dequeue_job(jid::JobId)
+    global _machine_jobparts
+    global _procid_jobparts
+    global _jobpart_machines
+
+    for (k,v) in _machine_jobparts filter!(x->(jid != x[1]), v) end
+    for (k,v) in _procid_jobparts filter!(x->(jid != x[1]), v) end
+
+    filter!((k,v)->(jid != k[1]), _jobpart_machines)    
+end
+
 dmap(source::MRSource, fn_find_rec::Function, fn_map::Function, fn_collect::Function) = dmapreduce(source, fn_find_rec, fn_map, fn_collect, nothing)
 function dmapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
     global _remotes
@@ -326,8 +347,8 @@ function dmapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, f
     (0 == length(_remotes)) && __prep_remotes()
 
     # create and set a job ctx
-    j = HdfsJobCtx(source, fn_find_rec, fn_map, fn_collect, fn_reduce)
     jid = _next_job_id()
+    j = HdfsJobCtx(jid, source, fn_find_rec, fn_map, fn_collect, fn_reduce)
     _job_store[jid] = j
 
     rdr_typ = isa(source, JobId) ? MapResultReader : HdfsReader
@@ -338,13 +359,11 @@ function dmapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, f
                 for procid in 1:_num_remotes()
                     @async begin
                         try 
-                            _debug && println("initializing job $jid at $procid")
-                            # TODO: look at source and assign appropriate open method
-                            remotecall_wait(procid, HDFS._worker_init_job, jid, rdr_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
-                            _debug && println("initialized job $jid at $procid")
-                        catch
+                            ret = remotecall_fetch(procid, HDFS._worker_init_job, jid, rdr_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
+                            (ret != jid) && throw(ret)
+                        catch ex
                             _debug && println("error initializing job $jid at $procid")
-                            _set_status(j, STATE_ERROR)
+                            _set_status(j, STATE_ERROR, ex)
                         end
                     end
                 end
@@ -353,13 +372,15 @@ function dmapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, f
             # once created at all workers...
             _debug && println("distributing blocks for job $jid")
             _distribute(jid, j, rdr_typ)
-            _debug && println("distributed blocks for job $jid")
-            _set_status(j, STATE_RUNNING)
-            _sched()
-            _debug && println("scheduled blocks for job $jid")
-        catch
+            if(j.info.state != STATE_ERROR)
+                _debug && println("distributed blocks for job $jid")
+                _set_status(j, STATE_RUNNING)
+                _sched()
+                _debug && println("scheduled blocks for job $jid")
+            end
+        catch ex
             _debug && println("error starting job $jid")
-            _set_status(j, STATE_ERROR)
+            _set_status(j, STATE_ERROR, ex)
         end
     end
     jid
@@ -371,20 +392,26 @@ function wait(jid::JobId)
 end
 wait(j::HdfsJobCtx) = fetch(j.info.trigger)
 
-function status(jid::JobId)
+function status(jid::JobId, desc=false)
     global _job_store
-    status(_job_store[jid])
+    status(_job_store[jid], desc)
 end
-function status(j::HdfsJobCtx)
-    (j.info.state == STATE_RUNNING) && (return "running")
-    (j.info.state == STATE_COMPLETE) && (return "complete")
-    (j.info.state == STATE_STARTING) && (return "starting")
-    (j.info.state == STATE_ERROR) && (return "error")
-    error("job in unknown state")
+function status(j::HdfsJobCtx, desc::Bool=false)
+    function status_str()
+        (j.info.state == STATE_RUNNING) && (return "running")
+        (j.info.state == STATE_COMPLETE) && (return "complete")
+        (j.info.state == STATE_STARTING) && (return "starting")
+        (j.info.state == STATE_ERROR) && (return "error")
+        error("job in unknown state")
+    end
+    if(desc) return (status_str(), j.info.state_info) end
+    return status_str()
 end
 
-function _set_status(j::HdfsJobCtx, state::Int)
+function _set_status(j::HdfsJobCtx, state::Int, desc=nothing)
     j.info.state = state
+    (nothing != desc) && (j.info.state_info = desc)
+    (STATE_ERROR == state) && _dequeue_job(j.jid)
     (STATE_RUNNING == state) && (j.info.sched_time = time())
     ((STATE_COMPLETE == state) || (STATE_ERROR == state)) && (j.info.end_time = time(); !isready(j.info.trigger) && put(j.info.trigger, state))
     state

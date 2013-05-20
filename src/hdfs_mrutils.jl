@@ -5,6 +5,7 @@
 # generic reduce functions
 function reduce_dicts(op::Function, result, results...)
     for d in results
+        (nothing == d) && continue
         (nothing == result) && (result = similar(d))
         for (k,v) in d
             haskey(result, k) ? op(result[k],v) : (result[k] = v)

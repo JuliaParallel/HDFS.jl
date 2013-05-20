@@ -4,7 +4,7 @@
 type MapResultReader <: MapInputReader
     url::String
     jid::Int64
-    results::Union(Any,Nothing)
+    results::Any
 
     function MapResultReader(url::String="")
         r = new("", 0, nothing)
