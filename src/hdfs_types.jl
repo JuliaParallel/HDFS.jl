@@ -42,7 +42,6 @@ immutable c_hdfsfileinfo
 end
 
 type HdfsFileInfo
-    c_info_ptr::Ptr{c_hdfsfileinfo}
     kind::Int8
     name::String
     last_mod::Int64
@@ -54,38 +53,14 @@ type HdfsFileInfo
     permissions::Int16
     last_access::Int64
 
-    function HdfsFileInfo(pt::Ptr{c_hdfsfileinfo})
-        if(C_NULL != pt)
-            cfi::c_hdfsfileinfo = unsafe_load(pt)
-            fi = new(pt, cfi.mKind, bytestring(cfi.mName), int64(cfi.mLastMod), cfi.mSize, cfi.mReplication, cfi.mBlockSize, 
+    HdfsFileInfo(pt::Ptr{c_hdfsfileinfo}) = (C_NULL != pt) ? HdfsFileInfo(unsafe_load(pt)) : new(HDFS_OBJ_INVALID, "", 0, 0, 0, 0, "", "", 0, 0)
+    HdfsFileInfo(cfi::c_hdfsfileinfo) = 
+        new(cfi.mKind, bytestring(cfi.mName), int64(cfi.mLastMod), cfi.mSize, cfi.mReplication, cfi.mBlockSize,
                         bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, int64(cfi.mLastAccess))
-            finalizer(fi, finalize_file_info)
-        else
-            fi = new(C_NULL, HDFS_OBJ_INVALID, "", 0, 0, 0, 0, "", "", 0, 0)
-        end
-        fi
-    end
-
-    function HdfsFileInfo(cfi::c_hdfsfileinfo)
-        new(C_NULL, cfi.mKind, bytestring(cfi.mName), int64(cfi.mLastMod), cfi.mSize, cfi.mReplication, cfi.mBlockSize,
-                        bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, int64(cfi.mLastAccess))
-    end
 end
 
 type HdfsFileInfoList
-    c_info_ptr::Ptr{c_hdfsfileinfo}
     arr::Array{HdfsFileInfo, 1}
-
-    function HdfsFileInfoList(pt::Ptr{c_hdfsfileinfo}, len::Int32)
-        if(C_NULL != pt)
-            local carr::Array{c_hdfsfileinfo,1} = pointer_to_array(pt, (int(len),))
-            fiarr = [HdfsFileInfo(x) for x in carr]
-            fi = new(pt, fiarr)
-            finalizer(fi, finalize_file_info_list)
-        else
-            fi = new(C_NULL, Array(HdfsFileInfo, 0))
-        end
-        fi
-    end
+    HdfsFileInfoList(pt::Ptr{c_hdfsfileinfo}, len::Int32) = new((C_NULL != pt) ? [HdfsFileInfo(x) for x in pointer_to_array(pt, (int(len),))] : HdfsFileInfo[])
 end
 

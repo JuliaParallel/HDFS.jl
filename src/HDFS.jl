@@ -39,8 +39,6 @@ include("hdfs_mrutils.jl")
 
 const hdfs_fsstore = Dict{(String, Integer, String), Vector{Any}}()
 
-finalize_file_info_list(fi::HdfsFileInfoList) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, length(fi.arr))
-finalize_file_info(fi::HdfsFileInfo) = ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), fi.c_info_ptr, 1)
 function finalize_hdfs_fs(fs::HdfsFS) 
     (C_NULL == fs.ptr) && return
     key, arr = _get_ptr_ref(fs.host, fs.port, fs.user, false)
@@ -154,14 +152,22 @@ hdfs_set_replication(fs::HdfsFS, path::String, replication::Integer)=ccall((:hdf
 
 function hdfs_list_directory(fs::HdfsFS, path::String)
     num_entries = zeros(Int32, 1)
-    file_info_list = ccall((:hdfsListDirectory, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}, Ptr{Int32}), fs.ptr, bytestring(path), num_entries)
-    if(C_NULL == file_info_list)
-        error(string("Error listing path ", path))
-    end
-    HdfsFileInfoList(file_info_list, num_entries[1]) 
+    info_ptr = ccall((:hdfsListDirectory, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}, Ptr{Int32}), fs.ptr, bytestring(path), num_entries)
+    (C_NULL == info_ptr) && error(string("Error listing path ", path))
+
+    ret = HdfsFileInfoList(info_ptr, num_entries[1]) 
+    ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), info_ptr, num_entries[1])
+    ret
 end
 
-hdfs_get_path_info(fs::HdfsFS, path::String) = HdfsFileInfo(ccall((:hdfsGetPathInfo, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path)))
+function hdfs_get_path_info(fs::HdfsFS, path::String)
+    info_ptr = ccall((:hdfsGetPathInfo, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
+    (C_NULL == info_ptr) && error(string("Error getting path ", path))
+
+    ret = HdfsFileInfo(info_ptr)
+    ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), info_ptr, 1)
+    ret
+end
 
 function hdfs_get_hosts(fs::HdfsFS, path::String, start::Integer, length::Integer)
     c_ptr = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), int64(start), int64(length))
