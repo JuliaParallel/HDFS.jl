@@ -30,15 +30,23 @@ Returns a job id which can be used to reference this job.
 
 
 
-**status**( *jobid* ) &rarr; *status_string*
+**status**( *jobid* ) &rarr; *status_string* 
+**status**( *jobid* , *describe* ) &rarr; (*status_string* , *additional_data*)
 
-The status string could be one of:
+The *status_string* could be one of:
 - *starting*: the job is getting initialized. (may be waiting for the results of another running job)
 - *running*: has been scheduled
 - *complete*: successfully finished
 - *error*: stalled as there was an error while processing
 
-TODO: return a percent completion indicator
+The *additional_info* could be one of the following depending on the current status:
+- starting: nothing
+- running: percent completion (int)
+- complete: nothing
+- error: 
+    - a string indicating more details
+    - an exception if error was set due to an exception
+    - any uncaught objects thrown during execution
 
 
 

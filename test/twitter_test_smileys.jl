@@ -156,6 +156,15 @@ function do_smiley_tests(furl::String)
     j_fin = dmapreduce(j2, find_yearly, map_total_from_yearly, collect_total, reduce_smiley)
 
     println("waiting for jobs to finish...")
+    loopstatus = true
+    while(loopstatus)
+        sleep(2)
+        for j in [j_mon, j2, j_fin]
+            jstatus,jstatusinfo = status(j,true)
+            (j == j_fin) && ((jstatus == "error") || (jstatus == "complete")) && (loopstatus = false)
+            (jstatus == "running") && println("$(j): $(jstatusinfo)% complete...")
+        end
+    end
     wait(j_fin)
     println("time taken (total time, wait time, run time):")
     println("\tdmapreduce daily to monthly: $(times(j_mon))")

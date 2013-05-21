@@ -154,17 +154,17 @@ function _push_to_worker(procid)
 
         # call method at worker
         _debug && println("calling procid $(procid) for jobid $(jid) with url $(blk_url)")
-        x = remotecall_fetch(procid, HDFS._worker_map_chunk, jid, blk_url)
+        ret = remotecall_fetch(procid, HDFS._worker_map_chunk, jid, blk_url)
         _debug && println("returned from call to procid $(procid) for jobid $(jid) with url $(blk_url)")
 
         # update the job id
         j = _job_store[jid] 
         (j.info.state == STATE_ERROR) && continue
 
-        if(!isa(x, Integer))
-            _set_status(j, STATE_ERROR, x)
+        if(!isa(ret, Integer))
+            _set_status(j, STATE_ERROR, ret)
         else
-            _debug && println("num records mapped: $(x)")
+            _debug && println("num records mapped: $(ret)")
             j.info.num_parts_done += 1
         end
 
@@ -392,7 +392,7 @@ function wait(jid::JobId)
 end
 wait(j::HdfsJobCtx) = fetch(j.info.trigger)
 
-function status(jid::JobId, desc=false)
+function status(jid::JobId, desc::Bool=false)
     global _job_store
     status(_job_store[jid], desc)
 end
@@ -404,8 +404,12 @@ function status(j::HdfsJobCtx, desc::Bool=false)
         (j.info.state == STATE_ERROR) && (return "error")
         error("job in unknown state")
     end
-    if(desc) return (status_str(), j.info.state_info) end
-    return status_str()
+
+    !desc && return status_str()
+
+    descinfo = j.info.state_info
+    (j.info.state == STATE_RUNNING) && (descinfo = int(j.info.num_parts_done*100/j.info.num_parts))
+    (status_str(), descinfo)
 end
 
 function _set_status(j::HdfsJobCtx, state::Int, desc=nothing)
@@ -419,8 +423,7 @@ end
 
 function results(jid::JobId) 
     global _job_store
-    j = _job_store[jid]
-    results(j)
+    results(_job_store[jid])
 end
 results(j::HdfsJobCtx) = (status(j), j.info.red)
 
@@ -438,8 +441,10 @@ end
 
 function times(jid::JobId)
     global _job_store
-    j = _job_store[jid]
-    ji = j.info 
-    ((ji.end_time - ji.begin_time), (ji.sched_time - ji.begin_time), (ji.end_time - ji.sched_time))
+    ji = _job_store[jid].info 
+    t_total = (ji.end_time - ji.begin_time)
+    t_sched = max(0, (ji.sched_time - ji.begin_time))
+    t_run = (t_sched > 0) ? (ji.end_time - ji.sched_time) : 0
+    (t_total, t_sched, t_run)
 end
 
