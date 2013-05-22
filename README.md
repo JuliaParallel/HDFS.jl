@@ -6,20 +6,23 @@ It also provides a simple parallel map-reduce functionality, as explained in the
 
 ### The HDFS Map Reduce Interface
 
-**dmap**( *data_source* , *reader_fn* , *map_fn* , *collect_fn* ) &rarr; *jobid*
+**dmap**( *data_source* , *map_fn* , *collect_fn* ) &rarr; *jobid*
 
-**dmapreduce**( *data_source* , *reader_fn* , *map_fn* , *collect_fn* , *reduce_fn* ) &rarr; *jobid*
+**dmapreduce**( *data_source* , *map_fn* , *collect_fn* , *reduce_fn* ) &rarr; *jobid*
 
 Submits a distributed map or map-reduce job. 
 Returns a job id which can be used to reference this job.
 
 **Parameters:**
 - data\_source: 
-    - can be a file in HDFS described by an URL of the form (hdfs://username@hdfs\_host:port/file\_path)
-    - can be a job id pointing to a previous map result
-- reader\_fn:
-    - reads one logical chunk (record) from the data source.
-    - can optionally implement filter to skip over uninteresting portions of the data.
+    - represented by an MRInput instance. The MRInput type encapsulates: (TODO: document MRInput)
+        - a set of source specifications. Source specifications can be:
+            - HDFS URL of the form hdfs://username@hdfs\_host:port/folderpath where all files in the folder are to be included
+            - HDFS URL of the form hdfs://username@hdfs\_host:port/folderpath/filepath where filepath can optionally be a regular expression to target multiple files.
+            - job id pointing to a previous map result
+        - reader\_fn:
+            - reads one logical chunk (record) from the data source.
+            - can optionally implement filter to skip over uninteresting portions of the data.
 - map\_fn:
     - transforms the record read by the reader to output 0 or more records.
 - collect\_fn:
