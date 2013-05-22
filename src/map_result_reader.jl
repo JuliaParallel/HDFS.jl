@@ -43,3 +43,21 @@ start(iter::MapResultReaderIter) = iter.fn_find_rec(iter, nothing)
 done(iter::MapResultReaderIter, state) = iter.is_done 
 next(iter::MapResultReaderIter, state) = (iter.rec, iter.fn_find_rec(iter, state))
 
+
+
+##
+# Input for map
+type MRMapInput <: MRInput
+    job_list::Vector{JobId}
+    reader_fn::Function
+
+    function MRMapInput(job_list, reader_fn::Function)
+        jl = JobId[]
+        for job_id in job_list
+            push!(jl, convert(JobId, job_id))
+        end
+        new(jl, reader_fn)
+    end
+end
+
+

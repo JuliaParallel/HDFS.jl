@@ -3,12 +3,9 @@ module HDFS
 import  Base.start, Base.done, Base.next,
         Base.wait
 
-abstract MapInputReader 
-abstract MapInputIterator
-
-export  hdfs_connect, hdfs_connect_as_user,
+export  hdfs_connect,
         hdfs_exists, hdfs_delete, 
-        hdfs_flush, hdfs_get_capacity, hdfs_get_default_block_size, hdfs_get_path_info, hdfs_get_used, 
+        hdfs_flush, hdfs_get_capacity, hdfs_get_default_block_size, hdfs_get_path_info, hdfs_get_used, hdfs_is_directory,
         hdfs_set_working_directory, hdfs_get_working_directory, hdfs_list_directory, hdfs_available,
         hdfs_create_directory, hdfs_rename, hdfs_close_file,
         hdfs_open_file, hdfs_open_file_read, hdfs_open_file_write, hdfs_open_file_append,
@@ -24,6 +21,7 @@ export  hdfs_connect, hdfs_connect_as_user,
         HdfsJobCtx, HdfsJobRunInfo, HdfsJobSchedInfo,
         JobId,
         # from hdfs_reader.jl
+        MRInput, MRMapInput, MRFileInput,
         HdfsReader, HdfsReaderIter, 
         MapResultReader, MapResultReaderIter,
         iterator, start, done, next
@@ -63,17 +61,12 @@ function _get_ptr_ref(host::String, port::Integer, user::String="", incr::Bool=t
     key, [0, C_NULL]
 end
 
-function hdfs_connect_as_user(host::String, port::Integer, user::String) 
+function hdfs_connect(host::String="default", port::Integer=0, user::String="") 
     key, arr = _get_ptr_ref(host, port, user)
     (0 != arr[1]) && return HdfsFS(host, port, user, arr[2])
-    ptr = ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32, Ptr{Uint8}), bytestring(host), int32(port), bytestring(user))
-    (C_NULL != ptr) && (hdfs_fsstore[key] = [1, ptr])
-    HdfsFS(host, port, user, ptr)
-end
-function hdfs_connect(host::String="default", port::Integer=0) 
-    key, arr = _get_ptr_ref(host, port, "")
-    (0 != arr[1]) && return HdfsFS(host, port, "", arr[2])
-    ptr = ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32), bytestring(host), int32(port))
+    ptr = (user == "") ? 
+            ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32), bytestring(host), int32(port)) : 
+            ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32, Ptr{Uint8}), bytestring(host), int32(port), bytestring(user))
     (C_NULL != ptr) && (hdfs_fsstore[key] = [1, ptr])
     HdfsFS(host, port, "", ptr)
 end
@@ -168,6 +161,8 @@ function hdfs_get_path_info(fs::HdfsFS, path::String)
     ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), info_ptr, 1)
     ret
 end
+
+hdfs_is_directory(fs::HdfsFS, path::String) = (hdfs_get_path_info(fs,path).kind == HDFS_OBJ_DIR)
 
 function hdfs_get_hosts(fs::HdfsFS, path::String, start::Integer, length::Integer)
     c_ptr = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), int64(start), int64(length))

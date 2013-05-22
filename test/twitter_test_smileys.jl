@@ -14,7 +14,7 @@
 #    ensure that the daily summary file is available at /twitter_daily_summary.tsv
 #
 # 4. run the test function
-#    julia> do_smiley_tests("/twitter_daily_summary.tsv")
+#    julia> do_smiley_tests("hdfs://host:port/twitter_daily_summary.tsv")
 #
 #    or, follow the steps below to do it step by step (or if graphics support is not available for plots)
 #
@@ -22,17 +22,17 @@
 #    this would demonstrate how we can use results from earlier maps in further map-reduce operations.
 #
 #    first, get a monthly summary
-#    julia> j_mon = dmapreduce("/twitter_daily_summary.tsv", find_smiley, map_monthly, collect_monthly, reduce_smiley)
+#    julia> j_mon = dmapreduce(MRFileInput(["hdfs://host:port/twitter_daily_summary.tsv"], find_smiley), map_monthly, collect_monthly, reduce_smiley)
 #
 #    next, once the above is done, get a yearly summary from the monthly data
-#    julia> j2 = dmap(j_mon, find_monthly, map_yearly_from_monthly, collect_yearly)
+#    julia> j2 = dmap(MRMapInput([j_mon], find_monthly), map_yearly_from_monthly, collect_yearly)
 #
 #    last, when the obove is done, get the total counts from the yearly data
 #    we also have a reduce step here to get the final result on to the master node
-#    julia> j_fin = dmapreduce(j2, find_yearly, map_total_from_yearly, collect_total, reduce_smiley)
+#    julia> j_fin = dmapreduce(MRMapInput([j2], find_yearly), map_total_from_yearly, collect_total, reduce_smiley)
 #
 #    if we didn't need the monthly summary, the yearly summary could have been gotten more efficiently as:
-#    julia> j_fin = dmapreduce("/twitter_daily_summary.tsv", find_smiley, map_total, collect_total, reduce_smiley)
+#    julia> j_fin = dmapreduce(MRFileInput(["hdfs://host:port/twitter_daily_summary.tsv"], find_smiley), map_total, collect_total, reduce_smiley)
 #
 # 6. get the total result out
 #    julia> wait(j_fin)
@@ -151,9 +151,9 @@ end
  
 function do_smiley_tests(furl::String)
     println("starting dmapreduce jobs...")
-    j_mon = dmapreduce(furl, find_smiley, map_monthly, collect_monthly, reduce_smiley)
-    j2 = dmap(j_mon, find_monthly, map_yearly_from_monthly, collect_yearly)
-    j_fin = dmapreduce(j2, find_yearly, map_total_from_yearly, collect_total, reduce_smiley)
+    j_mon = dmapreduce(MRFileInput([furl], find_smiley), map_monthly, collect_monthly, reduce_smiley)
+    j2 = dmap(MRMapInput([j_mon], find_monthly), map_yearly_from_monthly, collect_yearly)
+    j_fin = dmapreduce(MRMapInput([j2], find_yearly), map_total_from_yearly, collect_total, reduce_smiley)
 
     println("waiting for jobs to finish...")
     loopstatus = true

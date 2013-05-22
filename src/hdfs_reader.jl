@@ -44,7 +44,7 @@ function reset_pos(r::HdfsReader, url::String)
         portnum = port(comps)
         fname = comps.url
 
-        r.fs = (nothing == uname) ? hdfs_connect(hname, portnum) : hdfs_connect_as_user(hname, portnum, uname)
+        r.fs = hdfs_connect(hname, portnum, (nothing == uname)?"":uname)
         r.fi = hdfs_open_file_read(r.fs, fname)
         r.finfo = hdfs_get_path_info(r.fs, fname)
         r.url = url
@@ -90,3 +90,55 @@ start(iter::HdfsReaderIter) = iter.fn_find_rec(iter, 1)
 done(iter::HdfsReaderIter, state) = (state > iter.chunk_len)
 next(iter::HdfsReaderIter, state) = (iter.rec, iter.fn_find_rec(iter, state))
 
+
+##
+# Input for map
+type MRFileInput <: MRInput
+    file_list::Vector{String}
+    reader_fn::Function
+
+    function MRFileInput(file_list, reader_fn::Function)
+        fl = ASCIIString[]
+        rwild = r"[\*\[\?]"
+        fspec = ""
+       
+        add_file(f::String) = push!(fl, f)
+        function add_file(up::URLComponents, pattern::Regex=r".*")
+            for filt_fname in get_files(up, pattern)
+                add_file(filt_fname)
+            end
+        end
+
+        for fspec in file_list
+            up = urlparse(fspec)
+            if(ismatch(rwild, fspec))                                   # a directory with wild card specification
+                url,pattern = rsplit(up.url, "/", 2)                    # separate the directory path and wild card specification
+                ((pattern == "") || ismatch(rwild,url)) && error(string("wild card must be part of file name. invalid url: ", fspec))
+                up_dir = copy(up)
+                up_dir.url = (url == "") ? "/" : url
+                add_file(up_dir, Regex(pattern))
+            else
+                is_directory(up) ? add_file(up) : add_file(fspec)        # can be a directory or a file
+            end
+        end
+        new(fl, reader_fn)
+    end
+
+    function is_directory(comps::URLComponents)
+        uname = username(comps)
+        hdfs_is_directory(hdfs_connect(hostname(comps), port(comps), (nothing == uname)?"":uname), comps.url)
+    end
+
+    function get_files(comps::URLComponents, pattern::Regex)
+        function filt(filt_finfo::HdfsFileInfo)
+            (filt_finfo.kind != HDFS_OBJ_FILE) && return false
+            filt_fcomps = urlparse(filt_finfo.name)
+            filt_dir,file_fname = rsplit(filt_fcomps.url, "/", 2)
+            ismatch(pattern, file_fname)
+        end
+        uname = username(comps)
+        fs = hdfs_connect(hostname(comps), port(comps), (nothing == uname)?"":uname)
+        dir_list = hdfs_list_directory(fs, comps.url).arr
+        map(x->x.name, filter(filt, dir_list))
+    end
+end

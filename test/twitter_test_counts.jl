@@ -38,7 +38,7 @@ reduce_count_monthly(reduced, results...) = HDFS.reduce_dicts(+, reduced, result
 
 function do_plot_counts(furl::String, typ::String, tag::String)
     println("starting dmapreduce...")
-    j_mon = dmapreduce(furl, (x,y)->find_count_of_typ(x,y,typ), x->map_count_monthly(x, Regex(tag)), collect_count_monthly, reduce_count_monthly)
+    j_mon = dmapreduce(MRFileInput([furl], (x,y)->find_count_of_typ(x,y,typ)), x->map_count_monthly(x, Regex(tag)), collect_count_monthly, reduce_count_monthly)
 
     println("waiting for dmapreduce to finish...")
     wait(j_mon)

@@ -1,8 +1,4 @@
 
-typealias JobId     Int64
-typealias FuncNone  Union(Function,Nothing)
-typealias MRSource  Union(String,JobId)
-
 global _debug = false
 
 ##
@@ -47,10 +43,10 @@ end
 
 ##
 # Methods used only at worker nodes
-function _worker_init_job(jid::JobId, rdr_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+function _worker_init_job(jid::JobId, inp_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
     global _job_store
     global _def_wrkr_job_store
-    ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid] = HdfsJobCtx(jid, rdr_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
+    ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid] = HdfsJobCtx(jid, inp_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
     jid
 end
 
@@ -191,9 +187,7 @@ end
 ##
 # Job store and scheduler
 type HdfsJobSchedInfo
-    source_spec::MRSource                                   # job_id or url (optionally with wildcard)
-    source::Union(JobId,Vector)                             # job_id or list of files
-    dist_info::Any                                          # block distribution for source files
+    source_spec::MRInput                                    # job_id or url (optionally with wildcard)
     num_parts::Int
     num_parts_done::Int
     state::Int
@@ -204,8 +198,8 @@ type HdfsJobSchedInfo
     sched_time::Float64                                     # scheduled (after dependent jobs finish)
     end_time::Float64                                       # completed
 
-    function HdfsJobSchedInfo(source_spec::MRSource, source::Union(JobId,Vector), dist_info::Any, num_parts::Int)
-        new(source_spec, source, dist_info, num_parts, 0, STATE_STARTING, nothing, nothing, RemoteRef(), time(), 0.0, 0.0)
+    function HdfsJobSchedInfo(source_spec::MRInput)
+        new(source_spec, 0, 0, STATE_STARTING, nothing, nothing, RemoteRef(), time(), 0.0, 0.0)
     end
 end
 
@@ -224,32 +218,15 @@ type HdfsJobCtx
     info::Union(HdfsJobRunInfo, HdfsJobSchedInfo)           # holds sched info at master node and run info at worker nodes
 
     # constructor at the scheduler end
-    function HdfsJobCtx(jid::JobId, source::JobId, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
-        new(jid, fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobSchedInfo(source, source, [], _num_remotes()))
-    end
-
-    function HdfsJobCtx(jid::JobId, source::String, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
-        # break up source to host, port, file path
-        comps = urlparse(source)
-        uname = username(comps)
-        hname = hostname(comps)
-        portnum = port(comps)
-        fname = comps.url
-
-        # TODO: handle wild cards
-        fs = (nothing == uname) ? hdfs_connect(hname, portnum) : hdfs_connect_as_user(hname, portnum, uname)
-        d = Dict{String, Vector{Vector{String}}}()
-        finfo = hdfs_get_path_info(fs, fname)
-        blkdist = hdfs_get_hosts(fs, fname, 0, finfo.size) 
-        d[source] = blkdist
-        new(jid, fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobSchedInfo(source, [source], d, length(blkdist)))
+    function HdfsJobCtx(jid::JobId, source::MRInput, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+        new(jid, source.reader_fn, fn_map, fn_collect, fn_reduce, HdfsJobSchedInfo(source))
     end
 
     # constructor at the worker end
-    function HdfsJobCtx(jid::JobId, rdr_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+    function HdfsJobCtx(jid::JobId, inp_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
         rdr = nothing
-        (rdr_typ == HdfsReader) && (rdr = HdfsReader())
-        (rdr_typ == MapResultReader) && (rdr = MapResultReader())
+        (inp_typ == MRFileInput) && (rdr = HdfsReader())
+        (inp_typ == MRMapInput) && (rdr = MapResultReader())
         new(jid, fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobRunInfo(rdr,nothing))
     end
 end
@@ -265,66 +242,66 @@ const STATE_STARTING = 1
 const STATE_RUNNING = 2
 const STATE_COMPLETE = 3
 
-# remove machines where workers are not running
-# remap to other machines (currently remapping to "")
-function __remap_macs_to_procs(macs)
-    global _all_remote_names
-
-    available_macs = filter(x->contains(_all_remote_names, x), macs)
-    # TODO: figure out a better way to handle domain names
-    if (length(available_macs) == 0) 
-        macs = map(x->split(x,".")[1], macs)
-        available_macs = filter(x->contains(_all_remote_names, x), macs)
-    end
-    (length(available_macs) == 0) && push!(available_macs, "")
-    available_macs
-end
-
-function _distribute(jid::JobId, j::HdfsJobCtx, rdr_typ::DataType)
-    (rdr_typ == HdfsReader) && (return _distribute_hdfs_file(jid, j))
-    (rdr_typ == MapResultReader) && (return _distribute_map_result(jid, j))
-end
-
-function _distribute_map_result(jid::JobId, j::HdfsJobCtx)
+function _distribute(jid::JobId, source::MRMapInput)
     global _procid_jobparts
 
-    sch::HdfsJobSchedInfo = j.info
-    if(STATE_COMPLETE != wait(sch.source))
-        _set_status(j, STATE_ERROR, "source has errors")
-        return
-    end
-    for procid in 1:_num_remotes()
-        t = (jid, string(sch.source))
-        try
-            push!(_procid_jobparts[mac], t)
-        catch
-            _procid_jobparts[procid] = [t]
+    for src_jid in source.job_list
+        if(STATE_COMPLETE != wait(src_jid))
+            _set_status(j, STATE_ERROR, "source job id $(src_jid) has errors")
+            return
         end
     end
+    nparts = 0
+    for src_jid in source.job_list
+        t = (jid, string(src_jid))
+        nparts += _num_remotes()
+        for procid in 1:_num_remotes()
+            haskey(_procid_jobparts, procid) ? push!(_procid_jobparts[procid], t) : (_procid_jobparts[procid] = [t])
+        end
+    end
+    nparts
 end
 
-function _distribute_hdfs_file(jid::JobId, j::HdfsJobCtx)
+function _distribute(jid::JobId, source::MRFileInput)
     global _jobpart_machines
     global _machine_jobparts
 
-    sch::HdfsJobSchedInfo = j.info
-    for fname in sch.source
-        blk_dist = sch.dist_info[fname]
-        for blk_id in 1:length(blk_dist)
-            macs = blk_dist[blk_id]
-            macs = __remap_macs_to_procs(macs)
+    function get_blks(url)
+        up = urlparse(url)
+        uname = username(up)
+        fname = up.url
+        fs = hdfs_connect(hostname(up), port(up), (nothing == uname) ? "" : uname)
+        finfo = hdfs_get_path_info(fs, fname)
+        return hdfs_get_hosts(fs, fname, 0, finfo.size) 
+    end
+
+    # remove machines where workers are not running
+    # remap to other machines. map to default node "" if not running on any of the nodes
+    # TODO: since julia and hadoop may report different hostnames, is there a good way to get all hostnames of a node?
+    function remap_macs_to_procs(macs)
+        global _all_remote_names
+
+        available_macs = filter(x->contains(_all_remote_names, x), macs)
+        (length(available_macs) == 0) && (available_macs = filter(x->contains(_all_remote_names, x), map(x->split(x,".")[1], macs)))
+        (length(available_macs) == 0) && push!(available_macs, "")
+        available_macs
+    end
+
+    nparts = 0
+    for fname in source.file_list
+        blk_dist = get_blks(fname)
+        nparts += length(blk_dist)
+        for (blk_id,macs) in enumerate(blk_dist)
+            macs = remap_macs_to_procs(macs)
             t = (jid, string(fname, '#', blk_id))
             _jobpart_machines[t] = macs
             for mac in macs
                 # TODO: notmalize hostnames to ips
-                try
-                    push!(_machine_jobparts[mac], t)
-                catch
-                    _machine_jobparts[mac] = [t]
-                end
+                haskey(_machine_jobparts, mac) ?  push!(_machine_jobparts[mac], t) : (_machine_jobparts[mac] = [t])
             end
         end
     end
+    nparts
 end
 
 function _dequeue_job(jid::JobId)
@@ -338,8 +315,8 @@ function _dequeue_job(jid::JobId)
     filter!((k,v)->(jid != k[1]), _jobpart_machines)    
 end
 
-dmap(source::MRSource, fn_find_rec::Function, fn_map::Function, fn_collect::Function) = dmapreduce(source, fn_find_rec, fn_map, fn_collect, nothing)
-function dmapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+dmap(source::MRInput, fn_map::Function, fn_collect::Function) = dmapreduce(source, fn_map, fn_collect, nothing)
+function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
     global _remotes
     global _job_store
     global _debug
@@ -348,10 +325,11 @@ function dmapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, f
 
     # create and set a job ctx
     jid = _next_job_id()
-    j = HdfsJobCtx(jid, source, fn_find_rec, fn_map, fn_collect, fn_reduce)
+    j = HdfsJobCtx(jid, source, fn_map, fn_collect, fn_reduce)
     _job_store[jid] = j
 
-    rdr_typ = isa(source, JobId) ? MapResultReader : HdfsReader
+    inp_typ = typeof(source)
+    fn_find_rec = source.reader_fn
     @async begin
         try 
             # init job at all workers
@@ -359,7 +337,7 @@ function dmapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, f
                 for procid in 1:_num_remotes()
                     @async begin
                         try 
-                            ret = remotecall_fetch(procid, HDFS._worker_init_job, jid, rdr_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
+                            ret = remotecall_fetch(procid, HDFS._worker_init_job, jid, inp_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
                             (ret != jid) && throw(ret)
                         catch ex
                             _debug && println("error initializing job $jid at $procid")
@@ -371,7 +349,7 @@ function dmapreduce(source::MRSource, fn_find_rec::Function, fn_map::Function, f
 
             # once created at all workers...
             _debug && println("distributing blocks for job $jid")
-            _distribute(jid, j, rdr_typ)
+            j.info.num_parts = _distribute(jid, source)
             if(j.info.state != STATE_ERROR)
                 _debug && println("distributed blocks for job $jid")
                 _set_status(j, STATE_RUNNING)
@@ -397,18 +375,19 @@ function status(jid::JobId, desc::Bool=false)
     status(_job_store[jid], desc)
 end
 function status(j::HdfsJobCtx, desc::Bool=false)
+    ji = j.info
     function status_str()
-        (j.info.state == STATE_RUNNING) && (return "running")
-        (j.info.state == STATE_COMPLETE) && (return "complete")
-        (j.info.state == STATE_STARTING) && (return "starting")
-        (j.info.state == STATE_ERROR) && (return "error")
+        (ji.state == STATE_RUNNING) && (return "running")
+        (ji.state == STATE_COMPLETE) && (return "complete")
+        (ji.state == STATE_STARTING) && (return "starting")
+        (ji.state == STATE_ERROR) && (return "error")
         error("job in unknown state")
     end
 
     !desc && return status_str()
 
-    descinfo = j.info.state_info
-    (j.info.state == STATE_RUNNING) && (descinfo = int(j.info.num_parts_done*100/j.info.num_parts))
+    descinfo = ji.state_info
+    (ji.state == STATE_RUNNING) && (descinfo = (0 == ji.num_parts) ? 0 : int(ji.num_parts_done*100/ji.num_parts))
     (status_str(), descinfo)
 end
 
