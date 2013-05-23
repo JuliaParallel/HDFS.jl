@@ -35,18 +35,17 @@ end
 ##
 # generic routine to filter records from map results that of list type
 # 
-function mr_result_find_rec(jr::MapResultReaderIter, iter_status, filter_fn::FuncNone=nothing)
-    results = jr.r.results
-    (nothing == results) && (jr.is_done = true) && (return nothing)
+function mr_result_find_rec(r::MapResultReader, iter_status, filter_fn::FuncNone=nothing)
+    results = r.results
+    ret_rec = nothing
+    (nothing == results) && (return (ret_rec, true, iter_status))
     (nothing == iter_status) && (iter_status = start(results))
 
     while(!done(results, iter_status))
-        jr.rec, iter_status = next(results, iter_status)
-        ((nothing == filter_fn) || filter_fn(jr.rec)) && return iter_status
+        ret_rec, iter_status = next(results, iter_status)
+        ((nothing == filter_fn) || filter_fn(ret_rec)) && return (ret_rec, false, iter_status)
     end
-    jr.rec = []
-    jr.is_done = true
-    return iter_status
+    return (nothing, true, iter_status)
 end
 
 ##
@@ -56,19 +55,19 @@ end
 # max_rec_bytes: maximum possible bytes in a record as a hint. (used to read past the block to complete partial records at end of block)
 # tmplt: a template to match with. irrelevant columns can be nothing. performs an exact string match.
 # read_beyond: flag used to recurse into the next block
-function hdfs_find_rec_csv(jr::HdfsReaderIter, iter_status, rec_sep, col_sep, max_rec_bytes::Int, tmplt::Tuple=(), read_beyond::Bool=true)
-    rdr = jr.r
+function hdfs_find_rec_csv(rdr::HdfsReader, iter_status, rec_sep, col_sep, max_rec_bytes::Int, tmplt::Tuple=(), read_beyond::Bool=true)
     is_begin = (rdr.begin_blk == 1) # if first block, we should not ignore the first line
     final_pos = length(rdr.cv)
     end_pos = 0
     begin_tmplt = ((length(tmplt) > 0) && (nothing != tmplt[1])) ? convert(Vector{Uint8}, tmplt[1]) : nothing
     next_rec_pos = (nothing == iter_status) ? 1 : iter_status
+    ret_rec = []
 
     if(!is_begin)
         end_pos = search(rdr.cv, rec_sep, int(next_rec_pos))
         if((0 >= end_pos) && !eof(rdr) && read_beyond)
             read_next(rdr, max_rec_bytes)
-            return hdfs_find_rec_csv(jr, next_rec_pos, rec_sep, col_sep, 0, tmplt, false)
+            return hdfs_find_rec_csv(rdr, next_rec_pos, rec_sep, col_sep, 0, tmplt, false)
         else
             next_rec_pos = end_pos
         end
@@ -79,7 +78,7 @@ function hdfs_find_rec_csv(jr::HdfsReaderIter, iter_status, rec_sep, col_sep, ma
         #println("next_rec_pos $next_rec_pos, final_pos: $final_pos, end_pos: $end_pos, read_beyond: $read_beyond") 
         if((0 >= end_pos) && !eof(rdr) && read_beyond)
             read_next(rdr, max_rec_bytes)
-            return hdfs_find_rec_csv(jr, next_rec_pos, rec_sep, col_sep, 0, tmplt, false)
+            return hdfs_find_rec_csv(rdr, next_rec_pos, rec_sep, col_sep, 0, tmplt, false)
         else
             # if no rec boundary found, assume all data in buffer is the record.
             # this is valid only if this is the end of the file.
@@ -88,19 +87,18 @@ function hdfs_find_rec_csv(jr::HdfsReaderIter, iter_status, rec_sep, col_sep, ma
             (0 >= end_pos) && (end_pos = final_pos)
             is_interesting::Bool = (nothing != begin_tmplt) ? beginswithat(rdr.cv, int(next_rec_pos), begin_tmplt) : true
             if(is_interesting)
-                jr.rec = split(bytestring(sub(rdr.cv, int(next_rec_pos):int(end_pos))), col_sep)
+                ret_rec = split(bytestring(sub(rdr.cv, int(next_rec_pos):int(end_pos))), col_sep)
                 col_idx = 0
                 for tmplt_col in tmplt
                     col_idx += 1
                     (nothing == tmplt_col) && continue
-                    !(is_interesting = (jr.rec[col_idx] == tmplt_col)) && break
+                    !(is_interesting = (ret_rec[col_idx] == tmplt_col)) && break
                 end
             end
             next_rec_pos = end_pos+2
-            is_interesting && return next_rec_pos
+            is_interesting && return (ret_rec, (next_rec_pos > block_sz(rdr)), next_rec_pos)
         end
     end
-    jr.rec = []
-    final_pos+1    # next rec pos is beyond final pos to indicating end
+    return (nothing, true, final_pos+1)                      # next rec pos is beyond final pos to indicating end
 end
 

@@ -18,13 +18,10 @@ export  hdfs_connect,
         HdfsFS, HdfsFile, HdfsFileInfo, HdfsFileInfoList,
         # from hdfs_jobs.jl
         dmap, dmapreduce, results, status, unload, wait, times,
-        HdfsJobCtx, HdfsJobRunInfo, HdfsJobSchedInfo,
         JobId,
         # from hdfs_reader.jl
         MRInput, MRMapInput, MRFileInput,
-        HdfsReader, HdfsReaderIter, 
-        MapResultReader, MapResultReaderIter,
-        iterator, start, done, next
+        HdfsReader, MapResultReader
 
 using ChainedVectors
 using URLParse

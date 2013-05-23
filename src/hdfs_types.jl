@@ -12,12 +12,10 @@ else
 end
 
 abstract MapInputReader 
-abstract MapInputIterator
 abstract MRInput
 
 typealias JobId     Int64
 typealias FuncNone  Union(Function,Nothing)
-#typealias MRSource  Union(String,JobId)
 
 
 ## used to enforce types ##

@@ -41,6 +41,35 @@ function __prep_remotes()
     end
 end
 
+
+
+##
+# Iterator for MapInputReader using the find_rec function
+type MapInputIterator
+    r::MapInputReader
+    fn_find_rec::Function
+    is_done::Bool
+    rec::Union(Any,Nothing)
+
+    function MapInputIterator(r::MapInputReader, url::String, fn_find_rec::Function)
+        reset_pos(r, url)
+        new(r, fn_find_rec, false, nothing)
+    end
+end
+
+function start(iter::MapInputIterator) 
+    iter.rec, iter.is_done, state = iter.fn_find_rec(iter.r, nothing)
+    state
+end
+function next(iter::MapInputIterator, state)
+    ret_rec = iter.rec
+    iter.rec, iter.is_done, state = iter.fn_find_rec(iter.r, state)
+    (ret_rec, state)
+end
+done(iter::MapInputIterator, state) = iter.is_done
+
+
+
 ##
 # Methods used only at worker nodes
 function _worker_init_job(jid::JobId, inp_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
@@ -77,7 +106,7 @@ function _worker_map_chunk(jid::JobId, chunk_url::String)
     fn_collect = j.fn_collect
 
     results = jinfo.results
-    for rec in iterator(jinfo.rdr, chunk_url, j.fn_find_rec)
+    for rec in MapInputIterator(jinfo.rdr, chunk_url, j.fn_find_rec)
         (nothing == rec) && continue
         for mapped_rec in fn_map(rec)
             results = fn_collect(results, mapped_rec)

@@ -26,26 +26,6 @@ end
 
 
 ##
-# Iterator for HdfsReader using the find_rec function
-type MapResultReaderIter <: MapInputIterator
-    r::MapResultReader
-    fn_find_rec::Function
-    is_done::Bool
-    rec::Union(Any,Nothing)
-end
-
-function iterator(r::MapResultReader, url::String, fn_find_rec::Function)
-    reset_pos(r, url)
-    MapResultReaderIter(r, fn_find_rec, false, nothing)
-end
-
-start(iter::MapResultReaderIter) = iter.fn_find_rec(iter, nothing)
-done(iter::MapResultReaderIter, state) = iter.is_done 
-next(iter::MapResultReaderIter, state) = (iter.rec, iter.fn_find_rec(iter, state))
-
-
-
-##
 # Input for map
 type MRMapInput <: MRInput
     job_list::Vector{JobId}

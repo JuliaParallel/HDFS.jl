@@ -59,7 +59,7 @@ using Gaston
 
 ##
 # find smiley records from HDFS CSV file
-find_smiley(jr::HdfsReaderIter, next_rec_pos) = HDFS.hdfs_find_rec_csv(jr, next_rec_pos, '\n', '\t', 1024, ("smiley", nothing, nothing, nothing))
+find_smiley(r::HdfsReader, next_rec_pos) = HDFS.hdfs_find_rec_csv(r, next_rec_pos, '\n', '\t', 1024, ("smiley", nothing, nothing, nothing))
 
 ##
 # reduce smiley counts or array of counts
@@ -103,7 +103,7 @@ function collect_yearly(results, rec)
     results
 end
 
-find_yearly(jr::MapResultReaderIter, iter_status) = HDFS.mr_result_find_rec(jr, iter_status)
+find_yearly(r::MapResultReader, iter_status) = HDFS.mr_result_find_rec(r, iter_status)
 map_total_from_yearly(rec) = [(rec[1], sum(rec[2]))]
 
 
@@ -116,12 +116,16 @@ function map_monthly(rec)
     ts_year = int(ts[1:4])
     ts_mon = int(ts[5:6])
     month_idx = 12*(ts_year-2006) + ts_mon  # twitter begun from 2006
+    #println("rec: $(rec)")
+    #println("sent smiley=$(rec[4]) month_idx=$(month_idx) cnt=$(rec[3])")
+
     [(rec[4], month_idx, int(rec[3]))]
 end
 
 function collect_monthly(results, rec)
     (length(rec) == 0) && return results
     smiley, month_idx, cnt = rec
+    #println("got smiley=$(smiley) month_idx=$(month_idx) cnt=$(cnt)")
 
     local monthly::Vector{Int}
     try
@@ -137,7 +141,7 @@ function collect_monthly(results, rec)
     results
 end
 
-find_monthly(jr::MapResultReaderIter, iter_status) = HDFS.mr_result_find_rec(jr, iter_status)
+find_monthly(r::MapResultReader, iter_status) = HDFS.mr_result_find_rec(r, iter_status)
 function map_yearly_from_monthly(rec) 
     b = rec[2]
     ret = Array(Tuple,0)

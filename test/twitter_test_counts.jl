@@ -3,7 +3,7 @@ using Gaston
 
 ##
 # find smiley records from HDFS CSV file
-find_count_of_typ(jr::HdfsReaderIter, next_rec_pos, ttyp::String) = HDFS.hdfs_find_rec_csv(jr, next_rec_pos, '\n', '\t', 1024, (ttyp, nothing, nothing, nothing))
+find_count_of_typ(r::HdfsReader, next_rec_pos, ttyp::String) = HDFS.hdfs_find_rec_csv(r, next_rec_pos, '\n', '\t', 1024, (ttyp, nothing, nothing, nothing))
 
 function map_count_monthly(rec, tag::Regex)
     ((nothing == rec) || (length(rec) == 0) || !ismatch(tag, rec[4])) && return []

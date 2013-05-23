@@ -70,27 +70,6 @@ function block_sz(r::HdfsReader)
 end
 
 
-
-##
-# Iterator for HdfsReader using the find_rec function
-type HdfsReaderIter <: MapInputIterator
-    r::HdfsReader
-    fn_find_rec::Function
-    chunk_len::Int64
-    rec::Union(Any,Nothing)
-end
-
-function iterator(r::HdfsReader, url::String, fn_find_rec::Function)
-    reset_pos(r, url)
-    chunk_len = block_sz(r)
-    HdfsReaderIter(r, fn_find_rec, chunk_len, nothing)
-end
-
-start(iter::HdfsReaderIter) = iter.fn_find_rec(iter, 1)
-done(iter::HdfsReaderIter, state) = (state > iter.chunk_len)
-next(iter::HdfsReaderIter, state) = (iter.rec, iter.fn_find_rec(iter, state))
-
-
 ##
 # Input for map
 type MRFileInput <: MRInput
