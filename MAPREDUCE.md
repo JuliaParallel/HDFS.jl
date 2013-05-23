@@ -9,14 +9,7 @@ Returns a job id which can be used to reference this job.
 
 **Parameters:**
 - data\_source: 
-    - represented by an MRInput instance. The MRInput type encapsulates: (TODO: document MRInput)
-        - a set of source specifications. Source specifications can be:
-            - HDFS URL of the form hdfs://username@hdfs\_host:port/folderpath where all files in the folder are to be included
-            - HDFS URL of the form hdfs://username@hdfs\_host:port/folderpath/filepath where filepath can optionally be a regular expression to target multiple files.
-            - job id pointing to a previous map result
-        - reader\_fn:
-            - reads one logical chunk (record) from the data source.
-            - can optionally implement filter to skip over uninteresting portions of the data.
+    - represented by an MRInput instance, described in sections below.
 - map\_fn:
     - transforms the record read by the reader to output 0 or more records.
 - collect\_fn:
@@ -78,20 +71,29 @@ For a completed job, returns the time (seconds) it took:
 
 
 #### Data sources and the reader function
-Access to data sources are provided by lower level reader types, specific to each source. In the current implementation **HDFSFileReader** provides functionality to read HDFS files and **MapResultReader** assists reading previous map results. The supplied reader\_fn uses a reader instance to fetch data, and returns only interesting data for the mapper. The reader and the reader\_fn are combined to form an iterator that feeds the map function.
+Access to data sources are provided by lower level reader types, specific to each source. All reader types are of the abstract type **MapInputReader**. In the current implementation **HDFSFileReader** provides functionality to read HDFS files and **MapResultReader** assists reading previous map results. 
 
+A data source for HDFS map-reduce is an instance of abstract type `MRInput`. Two concrete implementations of it exist:
+- MRMapInput(job_list, reader_fn::Function)
+    - job_list is a list of job ids pointing to previous map results
+    - reader_fn is described below
+- MRFileInput(file_list, reader_fn::Function)
+    - file_list is a list of HDFS URLs, pointing to HDFS directories or files. The last part of the URL can optionally contain a regular expression targeted to pick up multiple files.
+    - e.g.: `hdfs://username@hdfs\_host:port/folderpath/filepath`, or `hdfs://username@hdfs\_host:port/folderpath`, or `hdfs://username@hdfs\_host:port/folderpath/.*\.csv`
+    - reader_fn is described below
 
+The reader\_fn uses a supplied MapInputReader instance to fetch one logical chunk of data. It can optionally include optimimizations to filter only interesting data for the mapper. The reader and the reader\_fn are combined to form an iterator that feeds the map function. The reader function essentially provides all the logic for iterating over records in the file in a single function.
 
-**reader_fn**( *iterator* , *state* ) &rarr; *state*
+**reader_fn**( *reader* , *state* ) &rarr; ( *record*, *is_done*, *state* )
 
-The reader function essentially provides the logic for the iterator in a single function:
-- the lower level reader instance with the data if made available to the function
-- the function decides how to implement an iterator over the data
-- the reader instance is available through the iterator as iterator.r
-- if the iterator has not been started yet, the first call starts the iterator and returns the status
-- otherwise fetches the next record into iterator.rec and returns the iterator status
-- if the iterator is done, sets iterator.is\_done to true
+Where:
+- reader: the lower level reader for the data source
+- state: the iterator state (set as `nothing` in the first call)
 
+Returns a tuple consisting of:
+- record: record read, or `nothing` if no record was found
+- is_done: whether there are any more records
+- state: iterator state that would be passed back in the next call
 
 
 #### Map and Collect
