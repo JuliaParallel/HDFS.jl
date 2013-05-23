@@ -1,3 +1,18 @@
+##
+# sample that plots usage trend of any hashtag, url, or smiley string over time.
+#
+# 1. bring up julia on all hadoop data nodes
+#       julia --machinefile ${HADOOP_HOME}/conf/slaves
+# 2. load this file (assuming file present in cwd)
+#       julia> require("twitter_test_smileys.jl")
+# 3. we would use the daily twitter summary data from infochimps 
+#    data source: http://www.infochimps.com/datasets/twitter-census-conversation-metrics-one-year-of-urls-hashtags-sm--2
+#    ensure that the daily summary file is available at /twitter_daily_summary.tsv
+#
+# 4. run the test function
+#    julia> do_plot_counts("hdfs://host:port/twitter_daily_summary.tsv")
+# 
+
 using HDFS
 using Gaston
 
@@ -15,7 +30,6 @@ function map_count_monthly(rec, tag::Regex)
     [(rec[4], month_idx, int(rec[3]))]
 end
 
-# TODO: define standard collectors
 function collect_count_monthly(results, rec)
     (length(rec) == 0) && return results
     hashtag, month_idx, cnt = rec
@@ -36,22 +50,40 @@ end
 
 reduce_count_monthly(reduced, results...) = HDFS.reduce_dicts(+, reduced, results...)
 
+
 function do_plot_counts(furl::String, typ::String, tag::String)
     println("starting dmapreduce...")
     j_mon = dmapreduce(MRFileInput([furl], (x,y)->find_count_of_typ(x,y,typ)), x->map_count_monthly(x, Regex(tag)), collect_count_monthly, reduce_count_monthly)
 
     println("waiting for dmapreduce to finish...")
+    loopstatus = true
+    while(loopstatus)
+        sleep(2)
+        jstatus,jstatusinfo = status(j_mon,true)
+        ((jstatus == "error") || (jstatus == "complete")) && (loopstatus = false)
+        (jstatus == "running") && println("$(j_mon): $(jstatusinfo)% complete...")
+    end
     wait(j_mon)
     println("time taken (total time, wait time, run time): $(times(j_mon))")
     println("")
     println("results:")
     counts = results(j_mon)[2]
     println(counts)
+    ((nothing == counts) || (0 == length(counts))) && return
+
+    monnames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    println("maximums:")
+    for (key,val) in counts
+        maxmon = indmax(val)
+        maxyear = 2006 + int(floor(maxmon/12))
+        maxmonname = ((maxmon-1)%12) + 1
+        println("$(key): $(monnames[maxmonname]) $(maxyear)")
+    end
+
     println("plot coming up...")
 
     set_terminal("x11")
     #months = Array(String, 0)
-    #monnames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
     #for yr in 2006:2010
     #    for m in monnames
     #        push!(months, string(yr, " ", m))
