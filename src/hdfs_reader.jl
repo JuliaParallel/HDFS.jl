@@ -18,7 +18,7 @@ end
 
 
 function read_into_buff(r::HdfsReader, start_pos::Integer, buff::Vector{Uint8}, bytes::Integer) 
-    hdfs_pread(r.fs, r.fi, convert(Int64, start_pos), convert(Ptr{Void}, buff), bytes) 
+    hdfs_pread(r.fi, convert(Int64, start_pos), convert(Ptr{Void}, buff), bytes) 
     buff
 end
 
@@ -45,7 +45,7 @@ function reset_pos(r::HdfsReader, url::String)
         fname = comps.url
 
         r.fs = hdfs_connect(hname, portnum, (nothing == uname)?"":uname)
-        r.fi = hdfs_open_file_read(r.fs, fname)
+        r.fi = hdfs_open(r.fs, fname, "r")
         r.finfo = hdfs_get_path_info(r.fs, fname)
         r.url = url
     end

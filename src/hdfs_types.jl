@@ -32,7 +32,14 @@ type HdfsFS
 end
 
 type HdfsFile
-  ptr::Ptr{Void}
+    fs::HdfsFS
+    path::String
+    ptr::Ptr{Void}
+    function HdfsFile(fs::HdfsFS, path::String, pt::Ptr{Void})
+        f = new(fs, path, pt)
+        (pt != C_NULL) && finalizer(f, hdfs_close)
+        f
+    end
 end
 
 immutable c_hdfsfileinfo
@@ -64,10 +71,5 @@ type HdfsFileInfo
     HdfsFileInfo(cfi::c_hdfsfileinfo) = 
         new(cfi.mKind, bytestring(cfi.mName), int64(cfi.mLastMod), cfi.mSize, cfi.mReplication, cfi.mBlockSize,
                         bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, int64(cfi.mLastAccess))
-end
-
-type HdfsFileInfoList
-    arr::Array{HdfsFileInfo, 1}
-    HdfsFileInfoList(pt::Ptr{c_hdfsfileinfo}, len::Int32) = new((C_NULL != pt) ? [HdfsFileInfo(x) for x in pointer_to_array(pt, (int(len),))] : HdfsFileInfo[])
 end
 

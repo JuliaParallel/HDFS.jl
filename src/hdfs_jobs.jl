@@ -301,7 +301,7 @@ function _distribute(jid::JobId, source::MRFileInput)
         fname = up.url
         fs = hdfs_connect(hostname(up), port(up), (nothing == uname) ? "" : uname)
         finfo = hdfs_get_path_info(fs, fname)
-        return hdfs_get_hosts(fs, fname, 0, finfo.size) 
+        return hdfs_blocks(fs, fname, 0, finfo.size) 
     end
 
     # remove machines where workers are not running
