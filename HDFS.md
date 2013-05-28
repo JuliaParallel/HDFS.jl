@@ -1,6 +1,7 @@
 ## HDFS API
 
 These are wrappers over HDFS C APIs in `libhdfs`.
+File `test/dfs_test.jl` has examples that illustrate API usage.
 
 ### Types
 

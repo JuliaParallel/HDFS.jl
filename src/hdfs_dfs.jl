@@ -52,7 +52,12 @@ end
 
 hdfs_close(file::HdfsFile) = ccall((:hdfsCloseFile, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
 
-hdfs_exists(fs::HdfsFS, path::String) = ccall((:hdfsExists, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
+function hdfs_exists(fs::HdfsFS, path::String) 
+    ret = ccall((:hdfsExists, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
+    # TODO: examine why hdfsExists returns -1 when file does not exist. as per docs it should return 1
+    #(ret < 0) && println("error checking file $(path) exists. error: $(ret)")
+    (ret == 0)
+end
 
 hdfs_seek(file::HdfsFile, desired_pos) = ccall((:hdfsSeek, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64), file.fs.ptr, file.ptr, desired_pos)
 
@@ -62,20 +67,20 @@ hdfs_read(file::HdfsFile, buff::Ptr{Void}, len::Integer) = ccall((:hdfsRead, _li
 function hdfs_read(file::HdfsFile, len::Integer)
     buff = Array(Uint8, len) 
     (-1 == (r = hdfs_read(file, convert(Ptr{Void}, buff), len))) && error("error reading file: -1")
-    buff
+    (buff, r)
 end
 
 hdfs_pread(file::HdfsFile, position::Int64, buff::Ptr{Void}, len::Integer) = ccall((:hdfsPread, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64, Ptr{Void}, Int32), file.fs.ptr, file.ptr, position, buff, len)
 function hdfs_pread(file::HdfsFile, position::Int64, len::Integer)
     buff = Array(Uint8, len) 
     (-1 == (r = hdfs_pread(file, position, buff, len))) && error("error reading file: -1")
-    buff
+    (buff, r)
 end
 
 #can be passed an ASCIIString (length not necessary in that case)
 hdfs_write(file::HdfsFile, buff::Ptr{Void}, len::Integer) = ccall((:hdfsWrite, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), file.fs.ptr, file.ptr, buff, int32(len))
-hdfs_write(file::HdfsFile, buff::ASCIIString, len::Integer) = hdfs_write(file, bytestring(buff), len)
-hdfs_write(file::HdfsFile, buff::ASCIIString) = hdfs_write(file, bytesteing(buff), length(buff))
+hdfs_write(file::HdfsFile, buff::ASCIIString, len::Integer) = hdfs_write(file, convert(Ptr{Void}, buff.data), len)
+hdfs_write(file::HdfsFile, buff::ASCIIString) = hdfs_write(file, bytestring(buff), length(buff))
 
 hdfs_flush(file::HdfsFile) = ccall((:hdfsFlush, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
 
@@ -89,12 +94,13 @@ hdfs_delete(fs::HdfsFS, path::String) = ccall((:hdfsDelete, _libhdfs), Int32, (P
 
 hdfs_rename(fs::HdfsFS, old_path::String, new_path::String) = ccall((:hdfsRename, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Uint8}), fs.ptr, bytestring(old_path), bytestring(new_path))
 
-hdfs_pwd(fs::HdfsFS, buff::Ptr{Uint8}, buff_sz::Integer) = ccall((:hdfsGetWorkingDirectory, _libhdfs), Ptr{Uint8}, (Ptr{Void}, Ptr{Uint8}, Int32), fs.ptr, buff, int32(buff_sz))
-function hdfs_pwd(fs::HdfsFS, buff_sz::Integer)
-    buff = Array(Uint8, buff_sz)
-    (C_NULL == (path = hdfs_pwd(fs, buff, buff_sz))) && error("Error getting working directory")
-    bytestring(path)
+function hdfs_pwd(fs::HdfsFS, buff::Vector{Uint8}) 
+    ptr = ccall((:hdfsGetWorkingDirectory, _libhdfs), Ptr{Uint8}, (Ptr{Void}, Ptr{Uint8}, Int32), fs.ptr, buff, int32(length(buff)))
+    (C_NULL == ptr) && error("error getting working directory")
+    len = ccall((:strlen, "libc"), Uint, (Ptr{Uint8},), buff)
+    ASCIIString(buff[1:len])
 end
+hdfs_pwd(fs::HdfsFS, buff_sz::Integer) = hdfs_pwd(fs, Array(Uint8, buff_sz))
 hdfs_pwd(fs::HdfsFS) = hdfs_pwd(fs, 1024)
 
 hdfs_cd(fs::HdfsFS, path::String) = ccall((:hdfsSetWorkingDirectory, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
@@ -108,7 +114,7 @@ function hdfs_list_directory(fs::HdfsFS, path::String)
     info_ptr = ccall((:hdfsListDirectory, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}, Ptr{Int32}), fs.ptr, bytestring(path), num_entries)
     (C_NULL == info_ptr) && error(string("Error listing path ", path))
 
-    ret = (C_NULL != pt) ? [HdfsFileInfo(x) for x in pointer_to_array(pt, (int(num_entries[1]),))] : HdfsFileInfo[]
+    ret = [HdfsFileInfo(x) for x in pointer_to_array(info_ptr, (int(num_entries[1]),))]
     ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), info_ptr, num_entries[1])
     ret
 end
