@@ -49,7 +49,7 @@ type MapInputIterator
     r::MapInputReader
     fn_find_rec::Function
     is_done::Bool
-    rec::Union(Any,Nothing)
+    rec::Any
 
     function MapInputIterator(r::MapInputReader, url::String, fn_find_rec::Function)
         reset_pos(r, url)

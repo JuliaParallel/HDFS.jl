@@ -20,14 +20,15 @@ using Gaston
 # find smiley records from HDFS CSV file
 find_count_of_typ(r::HdfsReader, next_rec_pos, ttyp::String) = HDFS.hdfs_find_rec_csv(r, next_rec_pos, '\n', '\t', 1024, (ttyp, nothing, nothing, nothing))
 
-function map_count_monthly(rec, tag::Regex)
+function map_count_monthly(rec, tag::Regex, combine::Bool)
     ((nothing == rec) || (length(rec) == 0) || !ismatch(tag, rec[4])) && return []
+    println(rec)
 
     ts = rec[2]
     ts_year = int(ts[1:4])
     ts_mon = int(ts[5:6])
     month_idx = 12*(ts_year-2006) + ts_mon  # twitter begun from 2006
-    [(rec[4], month_idx, int(rec[3]))]
+    [(combine ? tag.pattern : rec[4], month_idx, int(rec[3]))]
 end
 
 function collect_count_monthly(results, rec)
@@ -53,7 +54,7 @@ reduce_count_monthly(reduced, results...) = HDFS.reduce_dicts(+, reduced, result
 
 function do_plot_counts(furl::String, typ::String, tag::String)
     println("starting dmapreduce...")
-    j_mon = dmapreduce(MRFileInput([furl], (x,y)->find_count_of_typ(x,y,typ)), x->map_count_monthly(x, Regex(tag)), collect_count_monthly, reduce_count_monthly)
+    j_mon = dmapreduce(MRFileInput([furl], (x,y)->find_count_of_typ(x,y,typ)), x->map_count_monthly(x, Regex(tag), true), collect_count_monthly, reduce_count_monthly)
 
     println("waiting for dmapreduce to finish...")
     loopstatus = true
