@@ -11,10 +11,25 @@
 #
 # 4. run the test function
 #    julia> do_plot_counts("hdfs://host:port/twitter_daily_summary.tsv")
+#
+# TRENDS OBSERVED:
+#   - flu/swineflu/birdflu: Apr 2009
+#   - haloween: Oct
+#   - thanksgiving: Oct-Nov
+#   - obama: Nov 2008 (elected), Jan 2009 (speech), Oct 2009 (peace prize)
+#   - earthquake: Jan 2009 (costarica), Mar 2009 (Tonga), Apr 2009 (italy), Sep 2009 (southern sumatra)
+#
+# NOTE: 
+#   to show plots you need to load one of the following set of modules:
+#       - Gaston
+#       - Winston and Tk
+#
+#   If you are using Winston, it may help to modify the following in Winston.ini:
+#   ticklabels_offset       = 5
+#   ticklabels_style        = {fontsize:1.0, textangle:90}
 # 
 
 using HDFS
-using Gaston
 
 ##
 # find smiley records from HDFS CSV file
@@ -22,7 +37,7 @@ find_count_of_typ(r::HdfsReader, next_rec_pos, ttyp::String) = HDFS.hdfs_find_re
 
 function map_count_monthly(rec, tag::Regex, combine::Bool)
     ((nothing == rec) || (length(rec) == 0) || !ismatch(tag, rec[4])) && return []
-    println(rec)
+    #println(rec)
 
     ts = rec[2]
     ts_year = int(ts[1:4])
@@ -52,59 +67,122 @@ end
 reduce_count_monthly(reduced, results...) = HDFS.reduce_dicts(+, reduced, results...)
 
 
+
+##
+# twitter archive search begin
+const colors = ["blue", "red", "green", "violet", "black", "yellow", "magenta", "brown", "cyan", "pink"]
+const months = 6:46
+const monnames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+const yearmonths = String[]
+for y in [2006,2007,2008,2009]
+    for m in monnames
+        push!(yearmonths, string("$(m) $(y)"))
+    end
+end
+
 function do_plot_counts(furl::String, typ::String, tag::String)
+    function is_loaded(x::Symbol)
+        try
+            return (Module == typeof(eval(x)))
+        catch
+            return false
+        end
+    end
+
+    function plot_winston()
+        idx = 0
+        win = Toplevel(string(tag, " in ", typ, "s"), 900, 600)
+        c = Canvas(win, 900, 600)
+        pack(c, expand=true, fill="both")
+
+        p = FramedPlot()
+        #setattr(p.x1, "ticklabels", yearmonths[6:5:46])
+        #setattr(p.x1, "ticks", 6:5:46)
+        setattr(p.x1, "ticklabels", yearmonths[6:46])
+        setattr(p.x1, "ticks", 6:46)
+
+        for (key, val) in counts
+            idx += 1
+            add(p, Curve(months, val[6:46], "color", colors[idx]))
+            (idx == 10) && (idx = 0)
+        end
+        Winston.display(c,p)
+    end
+
+    function plot_gaston()
+        set_terminal("x11")
+        params = {}
+        idx = 0
+        for (key, val) in counts
+            idx += 1
+            push!(params, months); push!(params, val[6:46])
+            push!(params, "color"); push!(params, colors[idx])
+            push!(params, "legend"); push!(params, key)
+            (idx == 10) && (idx = 0)
+        end
+        push!(params, "title"); push!(params,string(tag, " in ", typ, "s"))
+        push!(params, "xlabel"); push!(params, "months")
+        push!(params, "ylabel"); push!(params, "counts")
+        plot(params...)
+    end 
+
+    function wait_results()
+        loopstatus = true
+        while(loopstatus)
+            sleep(2)
+            jstatus,jstatusinfo = status(j_mon,true)
+            ((jstatus == "error") || (jstatus == "complete")) && (loopstatus = false)
+            (jstatus == "running") && println("$(j_mon): $(jstatusinfo)% complete...")
+        end
+        wait(j_mon)
+        println("time taken (total time, wait time, run time): $(times(j_mon))")
+        println("")
+    end
+
+    function print_results()
+        println(counts)
+        ((nothing == counts) || (0 == length(counts))) && return
+
+        println("maximum:")
+        for (key,val) in counts
+            maxmon = indmax(val)
+            maxyear = 2006 + int(floor(maxmon/12))
+            maxmonname = ((maxmon-1)%12) + 1
+            println("$(key): $(monnames[maxmonname]) $(maxyear)")
+        end
+
+        println("local maximas:")
+        for (key,val) in counts
+            len = length(val)
+            avgs = [mean(val[max(1,(n-2)):min(len,(n+2))]) for n in 1:len]
+            for n in 1:len
+                if((val[n] > 25) && (val[n] > (1.25)*avgs[n]))
+                    println("val $(val[n]), avgs $(avgs[n]), n $(n)")
+                    maxyear = 2006 + int(floor((n-1)/12))
+                    maxmonname = ((n-1)%12) + 1
+                    println("$(key): $(monnames[maxmonname]) $(maxyear)")
+                end
+            end
+        end
+        
+        counts
+    end
+
+    ##
+    # function body begin
     println("starting dmapreduce...")
     j_mon = dmapreduce(MRFileInput([furl], (x,y)->find_count_of_typ(x,y,typ)), x->map_count_monthly(x, Regex(tag), true), collect_count_monthly, reduce_count_monthly)
 
     println("waiting for dmapreduce to finish...")
-    loopstatus = true
-    while(loopstatus)
-        sleep(2)
-        jstatus,jstatusinfo = status(j_mon,true)
-        ((jstatus == "error") || (jstatus == "complete")) && (loopstatus = false)
-        (jstatus == "running") && println("$(j_mon): $(jstatusinfo)% complete...")
-    end
-    wait(j_mon)
-    println("time taken (total time, wait time, run time): $(times(j_mon))")
-    println("")
+    wait_results()
+
     println("results:")
     counts = results(j_mon)[2]
-    println(counts)
-    ((nothing == counts) || (0 == length(counts))) && return
-
-    monnames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
-    println("maximums:")
-    for (key,val) in counts
-        maxmon = indmax(val)
-        maxyear = 2006 + int(floor(maxmon/12))
-        maxmonname = ((maxmon-1)%12) + 1
-        println("$(key): $(monnames[maxmonname]) $(maxyear)")
-    end
+    print_results()
 
     println("plot coming up...")
-
-    set_terminal("x11")
-    #months = Array(String, 0)
-    #for yr in 2006:2010
-    #    for m in monnames
-    #        push!(months, string(yr, " ", m))
-    #    end
-    #end
-    #months = months[6:46]
-    months = 6:46
-    colors = ["blue", "red", "green", "violet", "black", "yellow", "magenta", "brown", "cyan", "pink"]
-    params = {}
-    idx = 0
-    for (key, val) in counts
-        idx += 1
-        push!(params, months); push!(params, val[6:46])
-        push!(params, "color"); push!(params, colors[idx])
-        push!(params, "legend"); push!(params, key)
-        (idx == 10) && (idx = 0)
-    end
-    push!(params, "title"); push!(params,string(tag, " in ", typ, "s"))
-    push!(params, "xlabel"); push!(params, "months")
-    push!(params, "ylabel"); push!(params, "counts")
-    plot(params...)
+    is_loaded(:Winston) ? plot_winston() :
+    is_loaded(:Gaston) ? plot_gaston() :
+    println("can not plot results. no graphics library loaded.")
 end
- 
+

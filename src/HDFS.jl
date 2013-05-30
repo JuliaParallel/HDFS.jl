@@ -13,7 +13,7 @@ export  hdfs_connect,
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
         HdfsFS, HdfsFile, HdfsFileInfo, 
         # from hdfs_jobs.jl
-        dmap, dmapreduce, results, status, unload, wait, times, JobId,
+        dmap, dmapreduce, results, status, unload, wait, times, JobId, start_workers,
         # from hdfs_reader.jl
         MRInput, MRMapInput, MRFileInput,
         HdfsReader, MapResultReader

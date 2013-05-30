@@ -456,3 +456,8 @@ function times(jid::JobId)
     (t_total, t_sched, t_run)
 end
 
+function start_workers(remotefile::String; tunnel=false, dir=JULIA_HOME, exename="./julia-release-basic")
+    machines = split(readall(remotefile), '\n', false)
+    addprocs(machines, tunnel=tunnel, dir=dir, exename=exename)
+end
+
