@@ -129,7 +129,7 @@ function do_plot_counts(furl::String, typ::String, tag::String)
     function wait_results()
         loopstatus = true
         while(loopstatus)
-            sleep(2)
+            sleep(5)
             jstatus,jstatusinfo = status(j_mon,true)
             ((jstatus == "error") || (jstatus == "complete")) && (loopstatus = false)
             (jstatus == "running") && println("$(j_mon): $(jstatusinfo)% complete...")
@@ -157,7 +157,7 @@ function do_plot_counts(furl::String, typ::String, tag::String)
             avgs = [mean(val[max(1,(n-2)):min(len,(n+2))]) for n in 1:len]
             for n in 1:len
                 if((val[n] > 25) && (val[n] > (1.25)*avgs[n]))
-                    println("val $(val[n]), avgs $(avgs[n]), n $(n)")
+                    #println("val $(val[n]), avgs $(avgs[n]), n $(n)")
                     maxyear = 2006 + int(floor((n-1)/12))
                     maxmonname = ((n-1)%12) + 1
                     println("$(key): $(monnames[maxmonname]) $(maxyear)")

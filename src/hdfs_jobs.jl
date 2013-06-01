@@ -25,10 +25,10 @@ function __prep_remotes()
     machines = Array(ASCIIString, n-1)
     ips = Array(ASCIIString, n-1)
     hns = Array(ASCIIString, n-1)
-    wd = pwd()
+    #wd = pwd()
     for midx in 2:n
-        remotecall_wait(midx, cd, wd)
-        @assert wd == remotecall_fetch(midx, pwd)
+        #remotecall_wait(midx, cd, wd)
+        #@assert wd == remotecall_fetch(midx, pwd)
         machines[midx-1] = Base.worker_from_id(midx).host
         ips[midx-1] = remotecall_fetch(midx, getipaddr)
         hns[midx-1] = remotecall_fetch(midx, gethostname)
@@ -163,6 +163,26 @@ function __fetch_tasks(proc_id::Int, machine::String, ip::String, hn::String, pe
     jobpart
 end
 
+function _reduce_from_workers(j)
+    try
+        if(j.fn_reduce != nothing)
+            @sync begin
+                # TODO: distributed reduction and not plugged in at this place
+                for procid in 1:_num_remotes()
+                    @async begin
+                        red = remotecall_fetch(procid, HDFS._worker_fetch_collected, j.jid)
+                        isa(red,Exception) && throw(red)
+                        j.info.red = j.fn_reduce(j.info.red, red)
+                    end
+                end
+            end
+        end
+        _set_status(j, STATE_COMPLETE)
+    catch ex
+        _set_status(j, STATE_ERROR, ex)
+    end
+end
+
 function _push_to_worker(procid)
     global _remotes
     global _job_store
@@ -193,22 +213,7 @@ function _push_to_worker(procid)
             j.info.num_parts_done += 1
         end
 
-        if((j.info.state != STATE_ERROR) && (j.info.num_parts == j.info.num_parts_done))
-            try
-                if(j.fn_reduce != nothing)
-                    # do the reduce step
-                    # TODO: distributed reduction and not plugged in at this place
-                    for procid in 1:_num_remotes()
-                        red = remotecall_fetch(procid, HDFS._worker_fetch_collected, jid)
-                        isa(red,Exception) && throw(red)
-                        j.info.red = j.fn_reduce(j.info.red, red)
-                    end
-                end
-                _set_status(j, STATE_COMPLETE)
-            catch ex
-                _set_status(j, STATE_ERROR, ex)
-            end
-        end
+        (j.info.state != STATE_ERROR) && (j.info.num_parts == j.info.num_parts_done) && (@async _reduce_from_workers(j))
     end
 end
 
