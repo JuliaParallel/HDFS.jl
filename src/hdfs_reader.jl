@@ -73,35 +73,25 @@ end
 ##
 # Input for map
 type MRFileInput <: MRInput
-    file_list::Vector{String}
+    source_spec
     reader_fn::Function
 
-    function MRFileInput(file_list, reader_fn::Function)
-        fl = ASCIIString[]
-        rwild = r"[\*\[\?]"
-        fspec = ""
-       
-        add_file(f::String) = push!(fl, f)
-        function add_file(up::URLComponents, pattern::Regex=r".*")
-            for filt_fname in get_files(up, pattern)
-                add_file(filt_fname)
-            end
-        end
+    file_list
+    file_info
+    file_blocks
 
-        for fspec in file_list
-            up = urlparse(fspec)
-            if(ismatch(rwild, fspec))                                   # a directory with wild card specification
-                url,pattern = rsplit(up.url, "/", 2)                    # separate the directory path and wild card specification
-                ((pattern == "") || ismatch(rwild,url)) && error(string("wild card must be part of file name. invalid url: ", fspec))
-                up_dir = copy(up)
-                up_dir.url = (url == "") ? "/" : url
-                add_file(up_dir, Regex(pattern))
-            else
-                is_directory(up) ? add_file(up) : add_file(fspec)        # can be a directory or a file
-            end
-        end
-        new(fl, reader_fn)
+    function MRFileInput(source_spec, reader_fn::Function)
+        new(source_spec, reader_fn, nothing, nothing, nothing)
     end
+end
+
+
+function expand_file_inputs(inp::MRFileInput)
+    fl = ASCIIString[]
+    infol = HdfsFileInfo[]
+    blockl = {}
+    rwild = r"[\*\[\?]"
+    fspec = ""
 
     function is_directory(comps::URLComponents)
         uname = username(comps)
@@ -120,4 +110,41 @@ type MRFileInput <: MRInput
         dir_list = hdfs_list_directory(fs, comps.url).arr
         map(x->x.name, filter(filt, dir_list))
     end
+   
+    function add_file(f::String) 
+        up = urlparse(f)
+        uname = username(up)
+        fname = up.url
+        fs = hdfs_connect(hostname(up), port(up), (nothing == uname) ? "" : uname)
+        finfo = hdfs_get_path_info(fs, fname)
+        blocks = hdfs_blocks(fs, fname, 0, finfo.size)
+        
+        push!(fl, f)
+        push!(infol, finfo)
+        push!(blockl, blocks)
+    end
+
+    function add_file(up::URLComponents, pattern::Regex=r".*")
+        for filt_fname in get_files(up, pattern)
+            add_file(filt_fname)
+        end
+    end
+
+    for fspec in inp.source_spec
+        up = urlparse(fspec)
+        if(ismatch(rwild, fspec))                                   # a directory with wild card specification
+            url,pattern = rsplit(up.url, "/", 2)                    # separate the directory path and wild card specification
+            ((pattern == "") || ismatch(rwild,url)) && error(string("wild card must be part of file name. invalid url: ", fspec))
+            up_dir = copy(up)
+            up_dir.url = (url == "") ? "/" : url
+            add_file(up_dir, Regex(pattern))
+        else
+            is_directory(up) ? add_file(up) : add_file(fspec)        # can be a directory or a file
+        end
+    end
+    inp.file_list = fl
+    inp.file_info = infol
+    inp.file_blocks = blockl
+    inp
 end
+

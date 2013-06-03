@@ -1,6 +1,4 @@
 
-global _debug = false
-
 ##
 # Assign Job Ids. A one up number
 global __next_job_id = int64(0)::JobId
@@ -9,38 +7,18 @@ function _next_job_id()
     __next_job_id += 1
 end
 
+
 ##
-# Keep an account of the worker machines available
-const _remotes = Array(Vector{ASCIIString},0)
-const _all_remote_names = Set{String}()
-_num_remotes() = length(_remotes[1])
-function __prep_remotes()
-    global _remotes
-    global _all_remote_names
-
-    empty!(_remotes)
-    empty!(_all_remote_names)
-
-    n = nprocs()
-    machines = Array(ASCIIString, n-1)
-    ips = Array(ASCIIString, n-1)
-    hns = Array(ASCIIString, n-1)
-    #wd = pwd()
-    for midx in 2:n
-        #remotecall_wait(midx, cd, wd)
-        #@assert wd == remotecall_fetch(midx, pwd)
-        machines[midx-1] = Base.worker_from_id(midx).host
-        ips[midx-1] = remotecall_fetch(midx, getipaddr)
-        hns[midx-1] = remotecall_fetch(midx, gethostname)
-    end
-
-    for x in (machines, ips, hns)
-        push!(_remotes, x)
-        union!(_all_remote_names, x)
-        unshift!(x, "")     # to represent the default worker node
-    end
+# Worker task type. One of: map, file_info, reduce(in future)
+type WorkerTaskMap <: WorkerTask
+    jid::JobId
+    blk_url::String
 end
 
+type WorkerTaskFileInfo <: WorkerTask
+    jid::JobId
+    source::MRFileInput
+end
 
 
 ##
@@ -73,40 +51,29 @@ done(iter::MapInputIterator, state) = iter.is_done
 ##
 # Methods used only at worker nodes
 function _worker_init_job(jid::JobId, inp_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
-    global _job_store
-    global _def_wrkr_job_store
     ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid] = HdfsJobCtx(jid, inp_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
     jid
 end
 
 function _worker_unload(jid::JobId)
-    global _job_store
-    global _def_wrkr_job_store
     d = ((myid() == 1) ? _def_wrkr_job_store : _job_store)
     delete!(d, jid)
     jid
 end
 
 function _worker_fetch_collected(jid::JobId) 
-    global _job_store
-    global _def_wrkr_job_store
-
     ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid].info.results
 end
 
-function _worker_map_chunk(jid::JobId, chunk_url::String)
-    global _job_store
-    global _def_wrkr_job_store
-    global _debug
-
-    j = ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid]
+function _worker_task(t::WorkerTaskMap)
+    j = ((myid() == 1) ? _def_wrkr_job_store : _job_store)[t.jid]
     jinfo = j.info
     recs = 0
     fn_map = j.fn_map
     fn_collect = j.fn_collect
 
     results = jinfo.results
-    for rec in MapInputIterator(jinfo.rdr, chunk_url, j.fn_find_rec)
+    for rec in MapInputIterator(jinfo.rdr, t.blk_url, j.fn_find_rec)
         (nothing == rec) && continue
         for mapped_rec in fn_map(rec)
             results = fn_collect(results, mapped_rec)
@@ -118,49 +85,63 @@ function _worker_map_chunk(jid::JobId, chunk_url::String)
     recs
 end
 
+function _worker_task(t::WorkerTaskFileInfo)
+    expand_file_inputs(t.source)
+end
+
 
 ##
 # scheduler function
-const _feeders = Dict{Int,RemoteRef}()
 function _sched()
-    global _remotes
     # TODO: recalculate priorities and reorder _machine_jobparts
+    start_feeders()
+end
 
-    # start feeder tasks if required
-    for procid in 1:_num_remotes()
-        haskey(_feeders, procid) && !isready(_feeders[procid]) && continue
-        machine, ip, hn = map(x->x[procid], _remotes)
-        (nothing == __fetch_tasks(procid, machine, ip, hn, true)) && continue
-        _feeders[procid] = @async _push_to_worker(procid)
+function _callback(t::WorkerTaskFileInfo, ret)
+    # remove machines where workers are not running
+    # remap to other machines. map to default node "" if not running on any of the nodes
+    function remap_macs_to_procs(macs)
+        global _all_remote_names
+
+        available_macs = filter(x->contains(_all_remote_names, x), macs)
+        (length(available_macs) == 0) && (available_macs = filter(x->contains(_all_remote_names, x), map(x->split(x,".")[1], macs)))
+        (length(available_macs) == 0) && push!(available_macs, "")
+        available_macs
+    end
+
+    jid = t.jid
+    try
+        !isa(ret, MRFileInput) && throw(ret)
+
+        nparts = 0
+        for (idx,fname) in enumerate(ret.file_list)
+            blk_dist = ret.file_blocks[idx]
+            nparts += length(blk_dist)
+            for (blk_id,macs) in enumerate(blk_dist)
+                macs = remap_macs_to_procs(macs)
+                queue_worker_task(QueuedWorkerTask(WorkerTaskMap(jid, string(fname, '#', blk_id)), HDFS._callback, macs))
+            end
+        end
+        _start_running(jid, nparts)
+    catch ex
+        _debug && println("error starting job $(jid)")
+        _set_status(j, STATE_ERROR, ex)
     end
 end
 
-function __fetch_tasks(proc_id::Int, machine::String, ip::String, hn::String, peek::Bool=false)
-    global _machine_jobparts
-    global _procid_jobparts
-    global _jobpart_machines
+function _callback(t::WorkerTaskMap, ret)
+    jid = t.jid
+    j = _job_store[jid] 
+    (j.info.state == STATE_ERROR) && return
 
-    v = nothing
-    haskey(_procid_jobparts, proc_id) && (v = _procid_jobparts[proc_id])
-    ((v == nothing) || (0 == length(v))) && haskey(_machine_jobparts, machine) && (v = _machine_jobparts[machine])
-    ((v == nothing) || (0 == length(v))) && haskey(_machine_jobparts, ip) && (v = _machine_jobparts[ip])
-    ((v == nothing) || (0 == length(v))) && haskey(_machine_jobparts, hn) && (v = _machine_jobparts[hn])
-    ((v == nothing) || (0 == length(v))) && return nothing
-
-    peek && (return ((length(v) > 0) ? length(v) : nothing))
-
-    # get the first one in _machine_jobparts
-    jobpart = shift!(v)
-
-    # unschedule from other machines
-    if(haskey(_jobpart_machines, jobpart))
-        other_macs = delete!(_jobpart_machines, jobpart)
-        for mac in other_macs
-            filter!(x->(x != jobpart), _machine_jobparts[mac])
-        end
+    if(!isa(ret, Integer))
+        _set_status(j, STATE_ERROR, ret)
+    else
+        _debug && println("num records mapped: $(ret)")
+        j.info.num_parts_done += 1
     end
 
-    jobpart
+    (j.info.state != STATE_ERROR) && (j.info.num_parts == j.info.num_parts_done) && _reduce_from_workers(j)
 end
 
 function _reduce_from_workers(j)
@@ -182,41 +163,6 @@ function _reduce_from_workers(j)
         _set_status(j, STATE_ERROR, ex)
     end
 end
-
-function _push_to_worker(procid)
-    global _remotes
-    global _job_store
-
-    machine, ip, hn = map(x->x[procid], _remotes)
-
-    while(true)
-        # if no tasks, exit task
-        jobpart = __fetch_tasks(procid, machine, ip, hn)
-        (jobpart == nothing) && return
-       
-        # TODO: jobpart may be a command as well 
-        jid, blk_url = jobpart
-
-        # call method at worker
-        _debug && println("calling procid $(procid) for jobid $(jid) with url $(blk_url)")
-        ret = remotecall_fetch(procid, HDFS._worker_map_chunk, jid, blk_url)
-        _debug && println("returned from call to procid $(procid) for jobid $(jid) with url $(blk_url)")
-
-        # update the job id
-        j = _job_store[jid] 
-        (j.info.state == STATE_ERROR) && continue
-
-        if(!isa(ret, Integer))
-            _set_status(j, STATE_ERROR, ret)
-        else
-            _debug && println("num records mapped: $(ret)")
-            j.info.num_parts_done += 1
-        end
-
-        (j.info.state != STATE_ERROR) && (j.info.num_parts == j.info.num_parts_done) && (@async _reduce_from_workers(j))
-    end
-end
-
 
 ##
 # Job store and scheduler
@@ -267,14 +213,22 @@ end
 
 const _def_wrkr_job_store = Dict{JobId, HdfsJobCtx}()
 const _job_store = Dict{JobId, HdfsJobCtx}()
-const _jobpart_machines = Dict{Tuple,Vector{ASCIIString}}()
-const _machine_jobparts = Dict{ASCIIString, Vector{Tuple}}()
-const _procid_jobparts = Dict{Int, Vector{Tuple}}()
 
 const STATE_ERROR = 0
 const STATE_STARTING = 1
 const STATE_RUNNING = 2
 const STATE_COMPLETE = 3
+
+function _start_running(jid::JobId, nparts)
+    j = _job_store[jid]
+    j.info.num_parts = nparts
+    if(j.info.state != STATE_ERROR)
+        _debug && println("distributed blocks for job $jid")
+        _set_status(j, STATE_RUNNING)
+        _sched()
+        _debug && println("scheduled blocks for job $jid")
+    end
+end
 
 function _distribute(jid::JobId, source::MRMapInput)
     global _procid_jobparts
@@ -287,66 +241,14 @@ function _distribute(jid::JobId, source::MRMapInput)
     end
     nparts = 0
     for src_jid in source.job_list
-        t = (jid, string(src_jid))
         nparts += _num_remotes()
-        for procid in 1:_num_remotes()
-            haskey(_procid_jobparts, procid) ? push!(_procid_jobparts[procid], t) : (_procid_jobparts[procid] = [t])
-        end
+        queue_worker_task(QueuedWorkerTask(WorkerTaskMap(jid, string(src_jid)), HDFS._callback, :all))
     end
-    nparts
+    _start_running(jid, nparts)
 end
-
-function _distribute(jid::JobId, source::MRFileInput)
-    global _jobpart_machines
-    global _machine_jobparts
-
-    function get_blks(url)
-        up = urlparse(url)
-        uname = username(up)
-        fname = up.url
-        fs = hdfs_connect(hostname(up), port(up), (nothing == uname) ? "" : uname)
-        finfo = hdfs_get_path_info(fs, fname)
-        return hdfs_blocks(fs, fname, 0, finfo.size) 
-    end
-
-    # remove machines where workers are not running
-    # remap to other machines. map to default node "" if not running on any of the nodes
-    # TODO: since julia and hadoop may report different hostnames, is there a good way to get all hostnames of a node?
-    function remap_macs_to_procs(macs)
-        global _all_remote_names
-
-        available_macs = filter(x->contains(_all_remote_names, x), macs)
-        (length(available_macs) == 0) && (available_macs = filter(x->contains(_all_remote_names, x), map(x->split(x,".")[1], macs)))
-        (length(available_macs) == 0) && push!(available_macs, "")
-        available_macs
-    end
-
-    nparts = 0
-    for fname in source.file_list
-        blk_dist = get_blks(fname)
-        nparts += length(blk_dist)
-        for (blk_id,macs) in enumerate(blk_dist)
-            macs = remap_macs_to_procs(macs)
-            t = (jid, string(fname, '#', blk_id))
-            _jobpart_machines[t] = macs
-            for mac in macs
-                # TODO: notmalize hostnames to ips
-                haskey(_machine_jobparts, mac) ?  push!(_machine_jobparts[mac], t) : (_machine_jobparts[mac] = [t])
-            end
-        end
-    end
-    nparts
-end
-
-function _dequeue_job(jid::JobId)
-    global _machine_jobparts
-    global _procid_jobparts
-    global _jobpart_machines
-
-    for (k,v) in _machine_jobparts filter!(x->(jid != x[1]), v) end
-    for (k,v) in _procid_jobparts filter!(x->(jid != x[1]), v) end
-
-    filter!((k,v)->(jid != k[1]), _jobpart_machines)    
+function _distribute(jid::JobId, source::MRFileInput) 
+    queue_worker_task(QueuedWorkerTask(WorkerTaskFileInfo(jid,source), HDFS._callback, :any))
+    start_feeders()
 end
 
 dmap(source::MRInput, fn_map::Function, fn_collect::Function) = dmapreduce(source, fn_map, fn_collect, nothing)
@@ -383,13 +285,14 @@ function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_
 
             # once created at all workers...
             _debug && println("distributing blocks for job $jid")
-            j.info.num_parts = _distribute(jid, source)
-            if(j.info.state != STATE_ERROR)
-                _debug && println("distributed blocks for job $jid")
-                _set_status(j, STATE_RUNNING)
-                _sched()
-                _debug && println("scheduled blocks for job $jid")
-            end
+            _distribute(jid, source)
+            #j.info.num_parts = _distribute(jid, source)
+            #if(j.info.state != STATE_ERROR)
+            #    _debug && println("distributed blocks for job $jid")
+            #    _set_status(j, STATE_RUNNING)
+            #    _sched()
+            #    _debug && println("scheduled blocks for job $jid")
+            #end
         catch ex
             _debug && println("error starting job $jid")
             _set_status(j, STATE_ERROR, ex)
@@ -428,7 +331,7 @@ end
 function _set_status(j::HdfsJobCtx, state::Int, desc=nothing)
     j.info.state = state
     (nothing != desc) && (j.info.state_info = desc)
-    (STATE_ERROR == state) && _dequeue_job(j.jid)
+    (STATE_ERROR == state) && dequeue_worker_task((x)->(!isa(x.wtask, WorkerTaskMap) || (j.jid != x.wtask.jid))) 
     (STATE_RUNNING == state) && (j.info.sched_time = time())
     ((STATE_COMPLETE == state) || (STATE_ERROR == state)) && (j.info.end_time = time(); !isready(j.info.trigger) && put(j.info.trigger, state))
     state

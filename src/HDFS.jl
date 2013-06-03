@@ -21,7 +21,14 @@ export  hdfs_connect,
 using ChainedVectors
 using URLParse
 
+global _debug = false
+function _set_debug(d)
+    global _debug
+    _debug = d
+end
+
 include("hdfs_types.jl")
+include("hdfs_workers.jl")
 include("hdfs_reader.jl")
 include("map_result_reader.jl")
 include("hdfs_jobs.jl")
