@@ -1,3 +1,17 @@
+using Base.Collections
+
+import Base.Collections.dequeue!
+
+function dequeue!(pq::PriorityQueue, key)
+         !haskey(pq.index, key) && return
+         idx = delete!(pq.index, key)
+         delete!(pq.xs, idx)
+         for (k,v) in pq.index
+           (v >= idx) && (pq.index[k] = (v-1))
+         end
+     key
+end
+
 
 ##n account of the worker machines available
 const _remotes = Array(Vector{ASCIIString},0)
@@ -27,50 +41,75 @@ end
 # target can be:
 #   - proc id, or a list of procids
 #   - machine ip/hostname, or a list of ips/hostnames
-#   - :all, :any
+#   - :wrkr_all, :wrkr_any
 abstract WorkerTask
 type QueuedWorkerTask
     wtask::WorkerTask
+    remote_method::Function
     callback::FuncNone
     target::Union(Int,ASCIIString,Symbol,Vector{ASCIIString},Vector{Int})
+    qtime::Float64
+    function QueuedWorkerTask(wtask::WorkerTask, remote_method::Function, callback::FuncNone, target::Union(Int,ASCIIString,Symbol,Vector{ASCIIString},Vector{Int}))
+        new(wtask, remote_method, callback, target, time())
+    end
 end
 
 
 # Queues for distributing tasks
 # TODO: use priorityqueues
-const _machine_tasks = Dict{ASCIIString, Vector{QueuedWorkerTask}}()
-const _procid_tasks = Dict{Int, Vector{QueuedWorkerTask}}()
-const _any_tasks = Array(QueuedWorkerTask,0)
+const _machine_tasks = Dict{ASCIIString, PriorityQueue{QueuedWorkerTask,Float64}}()
+const _procid_tasks = Dict{Int, PriorityQueue{QueuedWorkerTask, Float64}}()
+const _any_tasks = PriorityQueue{QueuedWorkerTask,Float64}()
 
 queue_worker_task(t::QueuedWorkerTask) = queue_worker_task(t, t.target)
-queue_worker_task(t::QueuedWorkerTask, procid::Int) = haskey(_procid_tasks, procid) ? push!(_procid_tasks[procid], t) : (_procid_tasks[procid] = [t])
+function queue_worker_task(t::QueuedWorkerTask, procid::Int)
+    !haskey(_procid_tasks, procid) && (_procid_tasks[procid] = PriorityQueue{QueuedWorkerTask,Float64}())
+    (_procid_tasks[procid])[t] = Inf
+end
 queue_worker_task(t::QueuedWorkerTask, procid_list::Vector{Int}) = for procid in procid_list queue_worker_task(t, procid) end
-queue_worker_task(t::QueuedWorkerTask, machine::ASCIIString) = haskey(_machine_tasks, machine) ? push!(_machine_tasks[machine], t) : (_machine_tasks[machine] = [t])
-queue_worker_task(t::QueuedWorkerTask, machine_list::Vector{ASCIIString}) = for machine in machine_list queue_worker_task(t, machine) end
+function queue_worker_task(t::QueuedWorkerTask, machine::ASCIIString)
+    !haskey(_machine_tasks, machine) && (_machine_tasks[machine] = PriorityQueue{QueuedWorkerTask,Float64}())
+    (_machine_tasks[machine])[t] = Inf
+end
+function queue_worker_task(t::QueuedWorkerTask, machine_list::Vector{ASCIIString}) 
+    function remap_macs_to_procs(macs)
+        available_macs = filter(x->contains(_all_remote_names, x), macs)
+        (length(available_macs) == 0) && (available_macs = filter(x->contains(_all_remote_names, x), map(x->split(x,".")[1], macs)))
+        (length(available_macs) == 0) && push!(available_macs, "")
+        available_macs
+    end
+    for machine in remap_macs_to_procs(machine_list) queue_worker_task(t, machine) end
+end
 function queue_worker_task(t::QueuedWorkerTask, s::Symbol)
-    (:all == s) && return queue_worker_task(t::QueuedWorkerTask, 1:_num_remotes())
-    (:any == s) && return push!(_any_tasks, t)
+    (:wrkr_all == s) && return queue_worker_task(t::QueuedWorkerTask, [1:_num_remotes()])
+    (:wrkr_any == s) && return (_any_tasks[t] = Inf)
     error("unknown queue $(s)")
 end
 
 dequeue_worker_task(t::QueuedWorkerTask) = dequeue_worker_task(t::QueuedWorkerTask, t.target)
-dequeue_worker_task(t::QueuedWorkerTask, procid::Int) = haskey(_procid_tasks, procid) && filter!(x->(x != t), _procid_tasks[procid])
+dequeue_worker_task(t::QueuedWorkerTask, procid::Int) = haskey(_procid_tasks, procid) && dequeue!(_procid_tasks[procid], t)
 dequeue_worker_task(t::QueuedWorkerTask, procid_list::Vector{Int}) = for procid in procid_list dequeue_worker_task(t, procid) end
-dequeue_worker_task(t::QueuedWorkerTask, machine::ASCIIString) = haskey(_machine_tasks, machine) && filter!(x->(x != t), _machine_tasks[machine])
+dequeue_worker_task(t::QueuedWorkerTask, machine::ASCIIString) = haskey(_machine_tasks, machine) && dequeue!(_machine_tasks[machine], t)
 dequeue_worker_task(t::QueuedWorkerTask, machine_list::Vector{ASCIIString}) = for machine in machine_list dequeue_worker_task(t, machine) end
 function dequeue_worker_task(t::QueuedWorkerTask, s::Symbol)
-    (:all == s) && return dequeue_worker_task(t::QueuedWorkerTask, 1:_num_remotes())
-    (:any == s) && return filter!(x->(x != t), _any_tasks)
+    (:wrkr_all == s) && return dequeue_worker_task(t::QueuedWorkerTask, [1:_num_remotes()])
+    (:wrkr_any == s) && return filter!(x->(x != t), _any_tasks)
     error("unknown queue $(s)")
 end
 function dequeue_worker_task(filter_fn::Function)
-    for (k,v) in _machine_tasks filter!(filter_fn, v) end
-    for (k,v) in _procid_tasks filter!(filter_fn, v) end
+    for (_,v) in _machine_tasks filter!(filter_fn, v) end
+    for (_,v) in _procid_tasks filter!(filter_fn, v) end
     filter!(filter_fn, _any_tasks)
 end
 
 ##
 # scheduler function
+function set_priorities(calc_prio::Function)
+    for (k,v) in _machine_tasks for (k1,v1) in v v[k1] = calc_prio(k, k1, v1) end end
+    for (k,v) in _procid_tasks for (k1,v1) in v v[k1] = calc_prio(k, k1, v1) end end
+    for (k1, v1) in _any_tasks _any_tasks[k1] = calc_prio(:wrkr_any, k1, v1) end
+end
+
 const _feeders = Dict{Int,RemoteRef}()
 function start_feeders()
     _debug && println("starting feeders...")
@@ -93,7 +132,7 @@ function _fetch_tasks(proc_id::Int, ip::String, hn::String, peek::Bool=false)
 
     peek && (return ((length(v) > 0) ? length(v) : nothing))
 
-    qtask = shift!(v)
+    qtask = dequeue!(v)
     dequeue_worker_task(qtask)
     qtask
 end
@@ -111,7 +150,7 @@ function _push_to_worker(procid)
 
         # call method at worker
         _debug && println("calling procid $(procid) for task $(wtask)")
-        ret = remotecall_fetch(procid, HDFS._worker_task, wtask)
+        ret = remotecall_fetch(procid, qtask.remote_method, wtask)
         _debug && println("returned from call to procid $(procid) for task $(wtask)")
 
         try

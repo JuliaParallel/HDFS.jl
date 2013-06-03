@@ -92,24 +92,15 @@ end
 
 ##
 # scheduler function
+
 function _sched()
-    # TODO: recalculate priorities and reorder _machine_jobparts
+    set_priorities((_1,qt,_2)->qt.qtime)
     start_feeders()
 end
 
 function _callback(t::WorkerTaskFileInfo, ret)
-    # remove machines where workers are not running
-    # remap to other machines. map to default node "" if not running on any of the nodes
-    function remap_macs_to_procs(macs)
-        global _all_remote_names
-
-        available_macs = filter(x->contains(_all_remote_names, x), macs)
-        (length(available_macs) == 0) && (available_macs = filter(x->contains(_all_remote_names, x), map(x->split(x,".")[1], macs)))
-        (length(available_macs) == 0) && push!(available_macs, "")
-        available_macs
-    end
-
     jid = t.jid
+    j = _job_store[jid] 
     try
         !isa(ret, MRFileInput) && throw(ret)
 
@@ -118,8 +109,7 @@ function _callback(t::WorkerTaskFileInfo, ret)
             blk_dist = ret.file_blocks[idx]
             nparts += length(blk_dist)
             for (blk_id,macs) in enumerate(blk_dist)
-                macs = remap_macs_to_procs(macs)
-                queue_worker_task(QueuedWorkerTask(WorkerTaskMap(jid, string(fname, '#', blk_id)), HDFS._callback, macs))
+                queue_worker_task(QueuedWorkerTask(WorkerTaskMap(jid, string(fname, '#', blk_id)), HDFS._worker_task, HDFS._callback, macs))
             end
         end
         _start_running(jid, nparts)
@@ -231,32 +221,25 @@ function _start_running(jid::JobId, nparts)
 end
 
 function _distribute(jid::JobId, source::MRMapInput)
-    global _procid_jobparts
-
+    qtarr = map(x->QueuedWorkerTask(WorkerTaskMap(jid, string(x)), HDFS._worker_task, HDFS._callback, :wrkr_all), source.job_list)
     for src_jid in source.job_list
         if(STATE_COMPLETE != wait(src_jid))
+            j = _job_store[jid]
             _set_status(j, STATE_ERROR, "source job id $(src_jid) has errors")
             return
         end
     end
-    nparts = 0
-    for src_jid in source.job_list
-        nparts += _num_remotes()
-        queue_worker_task(QueuedWorkerTask(WorkerTaskMap(jid, string(src_jid)), HDFS._callback, :all))
-    end
+    nparts = length(qtarr) * _num_remotes()
+    for qt in qtarr queue_worker_task(qt) end
     _start_running(jid, nparts)
 end
 function _distribute(jid::JobId, source::MRFileInput) 
-    queue_worker_task(QueuedWorkerTask(WorkerTaskFileInfo(jid,source), HDFS._callback, :any))
+    queue_worker_task(QueuedWorkerTask(WorkerTaskFileInfo(jid,source), HDFS._worker_task, HDFS._callback, :wrkr_any))
     start_feeders()
 end
 
 dmap(source::MRInput, fn_map::Function, fn_collect::Function) = dmapreduce(source, fn_map, fn_collect, nothing)
 function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
-    global _remotes
-    global _job_store
-    global _debug
-
     (0 == length(_remotes)) && __prep_remotes()
 
     # create and set a job ctx
@@ -301,16 +284,10 @@ function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_
     jid
 end
 
-function wait(jid::JobId)
-    global _job_store
-    wait(_job_store[jid])
-end
+wait(jid::JobId) = wait(_job_store[jid])
 wait(j::HdfsJobCtx) = fetch(j.info.trigger)
 
-function status(jid::JobId, desc::Bool=false)
-    global _job_store
-    status(_job_store[jid], desc)
-end
+status(jid::JobId, desc::Bool=false) = status(_job_store[jid], desc)
 function status(j::HdfsJobCtx, desc::Bool=false)
     ji = j.info
     function status_str()
@@ -337,14 +314,10 @@ function _set_status(j::HdfsJobCtx, state::Int, desc=nothing)
     state
 end
 
-function results(jid::JobId) 
-    global _job_store
-    results(_job_store[jid])
-end
+results(jid::JobId) = results(_job_store[jid])
 results(j::HdfsJobCtx) = (status(j), j.info.red)
 
 function unload(jid::JobId)
-    global _job_store
     j = _job_store[jid]
     (j.info.state == STATE_RUNNING) && error("can't unload running job")
 
@@ -356,7 +329,6 @@ function unload(jid::JobId)
 end 
 
 function times(jid::JobId)
-    global _job_store
     ji = _job_store[jid].info 
     t_total = (ji.end_time - ji.begin_time)
     t_sched = max(0, (ji.sched_time - ji.begin_time))
