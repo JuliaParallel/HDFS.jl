@@ -269,13 +269,6 @@ function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_
             # once created at all workers...
             _debug && println("distributing blocks for job $jid")
             _distribute(jid, source)
-            #j.info.num_parts = _distribute(jid, source)
-            #if(j.info.state != STATE_ERROR)
-            #    _debug && println("distributed blocks for job $jid")
-            #    _set_status(j, STATE_RUNNING)
-            #    _sched()
-            #    _debug && println("scheduled blocks for job $jid")
-            #end
         catch ex
             _debug && println("error starting job $jid")
             _set_status(j, STATE_ERROR, ex)

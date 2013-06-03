@@ -5,7 +5,7 @@ import Base.Collections.dequeue!
 function dequeue!(pq::PriorityQueue, key)
          !haskey(pq.index, key) && return
          idx = delete!(pq.index, key)
-         delete!(pq.xs, idx)
+         splice!(pq.xs, idx)
          for (k,v) in pq.index
            (v >= idx) && (pq.index[k] = (v-1))
          end
@@ -133,7 +133,7 @@ function _fetch_tasks(proc_id::Int, ip::String, hn::String, peek::Bool=false)
     peek && (return ((length(v) > 0) ? length(v) : nothing))
 
     qtask = dequeue!(v)
-    dequeue_worker_task(qtask)
+    (:wrkr_all != qtask.target) && dequeue_worker_task(qtask)
     qtask
 end
 
