@@ -95,7 +95,6 @@ end
 
 function _sched()
     set_priorities((_1,qt,_2)->qt.qtime)
-    start_feeders()
 end
 
 function _callback(t::WorkerTaskFileInfo, ret)
@@ -139,7 +138,7 @@ function _reduce_from_workers(j)
         if(j.fn_reduce != nothing)
             @sync begin
                 # TODO: distributed reduction and not plugged in at this place
-                for procid in 1:_num_remotes()
+                for procid in 1:num_remotes()
                     @async begin
                         red = remotecall_fetch(procid, HDFS._worker_fetch_collected, j.jid)
                         isa(red,Exception) && throw(red)
@@ -229,18 +228,17 @@ function _distribute(jid::JobId, source::MRMapInput)
             return
         end
     end
-    nparts = length(qtarr) * _num_remotes()
+    nparts = length(qtarr) * num_remotes()
     for qt in qtarr queue_worker_task(qt) end
     _start_running(jid, nparts)
 end
 function _distribute(jid::JobId, source::MRFileInput) 
     queue_worker_task(QueuedWorkerTask(WorkerTaskFileInfo(jid,source), HDFS._worker_task, HDFS._callback, :wrkr_any))
-    start_feeders()
 end
 
 dmap(source::MRInput, fn_map::Function, fn_collect::Function) = dmapreduce(source, fn_map, fn_collect, nothing)
 function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
-    (0 == length(_remotes)) && __prep_remotes()
+    prep_remotes()
 
     # create and set a job ctx
     jid = _next_job_id()
@@ -253,7 +251,7 @@ function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_
         try 
             # init job at all workers
             @sync begin
-                for procid in 1:_num_remotes()
+                for procid in 1:num_remotes()
                     @async begin
                         try 
                             ret = remotecall_fetch(procid, HDFS._worker_init_job, jid, inp_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
@@ -314,7 +312,7 @@ function unload(jid::JobId)
     j = _job_store[jid]
     (j.info.state == STATE_RUNNING) && error("can't unload running job")
 
-    for procid in 1:_num_remotes()
+    for procid in 1:num_remotes()
         remotecall(procid, HDFS._worker_unload, jid)
     end
     delete!(_job_store, jid)

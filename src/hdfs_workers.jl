@@ -16,8 +16,9 @@ end
 ##n account of the worker machines available
 const _remotes = Array(Vector{ASCIIString},0)
 const _all_remote_names = Set{String}()
-_num_remotes() = length(_remotes[1])
-function __prep_remotes()
+num_remotes() = length(_remotes[1])
+function prep_remotes(force::Bool=false)
+    !force && (0 != length(_remotes)) && return
     empty!(_remotes)
     empty!(_all_remote_names)
 
@@ -61,38 +62,41 @@ const _machine_tasks = Dict{ASCIIString, PriorityQueue{QueuedWorkerTask,Float64}
 const _procid_tasks = Dict{Int, PriorityQueue{QueuedWorkerTask, Float64}}()
 const _any_tasks = PriorityQueue{QueuedWorkerTask,Float64}()
 
-queue_worker_task(t::QueuedWorkerTask) = queue_worker_task(t, t.target)
-function queue_worker_task(t::QueuedWorkerTask, procid::Int)
+function queue_worker_task(t::QueuedWorkerTask) 
+    _queue_worker_task(t, t.target)
+    _start_feeders()
+end
+function _queue_worker_task(t::QueuedWorkerTask, procid::Int)
     !haskey(_procid_tasks, procid) && (_procid_tasks[procid] = PriorityQueue{QueuedWorkerTask,Float64}())
     (_procid_tasks[procid])[t] = Inf
 end
-queue_worker_task(t::QueuedWorkerTask, procid_list::Vector{Int}) = for procid in procid_list queue_worker_task(t, procid) end
-function queue_worker_task(t::QueuedWorkerTask, machine::ASCIIString)
+_queue_worker_task(t::QueuedWorkerTask, procid_list::Vector{Int}) = for procid in procid_list _queue_worker_task(t, procid) end
+function _queue_worker_task(t::QueuedWorkerTask, machine::ASCIIString)
     !haskey(_machine_tasks, machine) && (_machine_tasks[machine] = PriorityQueue{QueuedWorkerTask,Float64}())
     (_machine_tasks[machine])[t] = Inf
 end
-function queue_worker_task(t::QueuedWorkerTask, machine_list::Vector{ASCIIString}) 
+function _queue_worker_task(t::QueuedWorkerTask, machine_list::Vector{ASCIIString}) 
     function remap_macs_to_procs(macs)
         available_macs = filter(x->contains(_all_remote_names, x), macs)
         (length(available_macs) == 0) && (available_macs = filter(x->contains(_all_remote_names, x), map(x->split(x,".")[1], macs)))
         (length(available_macs) == 0) && push!(available_macs, "")
         available_macs
     end
-    for machine in remap_macs_to_procs(machine_list) queue_worker_task(t, machine) end
+    for machine in remap_macs_to_procs(machine_list) _queue_worker_task(t, machine) end
 end
-function queue_worker_task(t::QueuedWorkerTask, s::Symbol)
-    (:wrkr_all == s) && return queue_worker_task(t::QueuedWorkerTask, [1:_num_remotes()])
+function _queue_worker_task(t::QueuedWorkerTask, s::Symbol)
+    (:wrkr_all == s) && return _queue_worker_task(t::QueuedWorkerTask, [1:num_remotes()])
     (:wrkr_any == s) && return (_any_tasks[t] = Inf)
     error("unknown queue $(s)")
 end
 
-dequeue_worker_task(t::QueuedWorkerTask) = dequeue_worker_task(t::QueuedWorkerTask, t.target)
-dequeue_worker_task(t::QueuedWorkerTask, procid::Int) = haskey(_procid_tasks, procid) && dequeue!(_procid_tasks[procid], t)
-dequeue_worker_task(t::QueuedWorkerTask, procid_list::Vector{Int}) = for procid in procid_list dequeue_worker_task(t, procid) end
-dequeue_worker_task(t::QueuedWorkerTask, machine::ASCIIString) = haskey(_machine_tasks, machine) && dequeue!(_machine_tasks[machine], t)
-dequeue_worker_task(t::QueuedWorkerTask, machine_list::Vector{ASCIIString}) = for machine in machine_list dequeue_worker_task(t, machine) end
-function dequeue_worker_task(t::QueuedWorkerTask, s::Symbol)
-    (:wrkr_all == s) && return dequeue_worker_task(t::QueuedWorkerTask, [1:_num_remotes()])
+dequeue_worker_task(t::QueuedWorkerTask) = _dequeue_worker_task(t::QueuedWorkerTask, t.target)
+_dequeue_worker_task(t::QueuedWorkerTask, procid::Int) = haskey(_procid_tasks, procid) && dequeue!(_procid_tasks[procid], t)
+_dequeue_worker_task(t::QueuedWorkerTask, procid_list::Vector{Int}) = for procid in procid_list _dequeue_worker_task(t, procid) end
+_dequeue_worker_task(t::QueuedWorkerTask, machine::ASCIIString) = haskey(_machine_tasks, machine) && dequeue!(_machine_tasks[machine], t)
+_dequeue_worker_task(t::QueuedWorkerTask, machine_list::Vector{ASCIIString}) = for machine in machine_list _dequeue_worker_task(t, machine) end
+function _dequeue_worker_task(t::QueuedWorkerTask, s::Symbol)
+    (:wrkr_all == s) && return _dequeue_worker_task(t::QueuedWorkerTask, [1:num_remotes()])
     (:wrkr_any == s) && return filter!(x->(x != t), _any_tasks)
     error("unknown queue $(s)")
 end
@@ -111,10 +115,10 @@ function set_priorities(calc_prio::Function)
 end
 
 const _feeders = Dict{Int,RemoteRef}()
-function start_feeders()
+function _start_feeders()
     _debug && println("starting feeders...")
     # start feeder tasks if required
-    for procid in 1:_num_remotes()
+    for procid in 1:num_remotes()
         haskey(_feeders, procid) && !isready(_feeders[procid]) && continue
         ip, hn = map(x->x[procid], _remotes)
         (nothing == _fetch_tasks(procid, ip, hn, true)) && continue
