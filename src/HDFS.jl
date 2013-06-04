@@ -20,6 +20,7 @@ export  hdfs_connect,
 
 using ChainedVectors
 using URLParse
+using PTools
 
 global _debug = false
 function _set_debug(d)
@@ -28,7 +29,6 @@ function _set_debug(d)
 end
 
 include("hdfs_types.jl")
-include("hdfs_workers.jl")
 include("hdfs_reader.jl")
 include("map_result_reader.jl")
 include("hdfs_jobs.jl")
