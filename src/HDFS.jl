@@ -33,7 +33,8 @@ include("hdfs_reader.jl")
 include("map_result_reader.jl")
 include("hdfs_jobs.jl")
 include("hdfs_mrutils.jl")
-include("hdfs_dfs.jl")
-
+if(C_NULL != dlopen_e(_libhdfs))
+    include("hdfs_dfs.jl")
+end
 end
 
