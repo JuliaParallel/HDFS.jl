@@ -20,6 +20,23 @@ type WorkerTaskFileInfo <: WorkerTask
     source::MRFileInput
 end
 
+type WorkerTaskInitJob <:WorkerTask
+    jid::JobId
+    inp_typ::DataType
+    fn_find_rec::Function
+    fn_map::Function
+    fn_collect::Function
+    fn_reduce::FuncNone
+end
+
+type WorkerTaskUnloadJob <:WorkerTask
+    jid::JobId
+end
+
+type WorkerTaskFetchCollected <:WorkerTask
+    jid::JobId
+end
+
 
 ##
 # Iterator for MapInputReader using the find_rec function
@@ -47,22 +64,19 @@ end
 done(iter::MapInputIterator, state) = iter.is_done
 
 
-
-##
-# Methods used only at worker nodes
-function _worker_init_job(jid::JobId, inp_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
-    ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid] = HdfsJobCtx(jid, inp_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
-    jid
+function _worker_task(t::WorkerTaskInitJob)
+    ((myid() == 1) ? _def_wrkr_job_store : _job_store)[t.jid] = HdfsJobCtx(t.jid, t.inp_typ, t.fn_find_rec, t.fn_map, t.fn_collect, t.fn_reduce)
+    t.jid
 end
 
-function _worker_unload(jid::JobId)
+function _worker_task(t::WorkerTaskUnloadJob)
     d = ((myid() == 1) ? _def_wrkr_job_store : _job_store)
-    delete!(d, jid)
-    jid
+    delete!(d, t.jid)
+    t.jid
 end
 
-function _worker_fetch_collected(jid::JobId) 
-    ((myid() == 1) ? _def_wrkr_job_store : _job_store)[jid].info.results
+function _worker_task(t::WorkerTaskFetchCollected)
+    ((myid() == 1) ? _def_wrkr_job_store : _job_store)[t.jid].info.results
 end
 
 function _worker_task(t::WorkerTaskMap)
@@ -92,9 +106,50 @@ end
 
 ##
 # scheduler function
-
+# TODO: queued task priorities to be linked to the chain
 function _sched()
-    set_priorities((_1,qt,_2)->qt.qtime)
+    set_priorities((_1,qt,_2)->float64(qt.wtask.jid))
+end
+
+function _callback(t::WorkerTaskInitJob, ret)
+    jid = t.jid
+    !haskey(_job_store, jid) && return # if job is deleted because of a past error
+    j = _job_store[jid]
+
+    (ret != jid) && return _set_status(j, STATE_ERROR, ret)
+    if(0 == (j.info.num_pending_inits -= 1))
+        _debug && println("distributing blocks for job $jid")
+        @async begin
+            try
+                _distribute(jid, j.info.source_spec)
+            catch ex
+                _debug && println("error distributing job $jid")
+                _set_status(j, STATE_ERROR, ex)
+            end
+        end
+    end
+end
+
+function _callback(t::WorkerTaskFetchCollected, ret)
+    jid = t.jid
+    !haskey(_job_store, jid) && return # if job is deleted because of a past error
+    j = _job_store[jid]
+
+    if(isa(ret,Exception))
+        _set_status(j, STATE_ERROR, ret)
+        dequeue_worker_task(t)
+        return
+    end
+    ji = j.info
+    try
+        ji.red = j.fn_reduce(ji.red, ret)
+        ji.num_reduces_done += 1
+        (ji.num_reduces == ji.num_reduces_done) && _set_status(j, STATE_COMPLETE)
+    catch ex
+        _debug && println("error reducing job $jid")
+        _set_status(j, STATE_ERROR, ex)
+        return
+    end
 end
 
 function _callback(t::WorkerTaskFileInfo, ret)
@@ -122,36 +177,18 @@ function _callback(t::WorkerTaskMap, ret)
     jid = t.jid
     j = _job_store[jid] 
     (j.info.state == STATE_ERROR) && return
+    !isa(ret, Integer) && (return _set_status(j, STATE_ERROR, ret))
 
-    if(!isa(ret, Integer))
-        _set_status(j, STATE_ERROR, ret)
-    else
-        _debug && println("num records mapped: $(ret)")
-        j.info.num_parts_done += 1
-    end
+    _debug && println("num records mapped: $(ret)")
+    j.info.num_parts_done += 1
 
-    (j.info.state != STATE_ERROR) && (j.info.num_parts == j.info.num_parts_done) && _reduce_from_workers(j)
-end
-
-function _reduce_from_workers(j)
-    try
-        if(j.fn_reduce != nothing)
-            @sync begin
-                # TODO: distributed reduction and not plugged in at this place
-                for procid in 1:num_remotes()
-                    @async begin
-                        red = remotecall_fetch(procid, HDFS._worker_fetch_collected, j.jid)
-                        isa(red,Exception) && throw(red)
-                        j.info.red = j.fn_reduce(j.info.red, red)
-                    end
-                end
-            end
-        end
-        _set_status(j, STATE_COMPLETE)
-    catch ex
-        _set_status(j, STATE_ERROR, ex)
+    if(j.info.num_parts == j.info.num_parts_done)
+        (j.fn_reduce == nothing) && (return _set_status(j, STATE_COMPLETE))
+        j.info.num_reduces = num_remotes()
+        queue_worker_task(QueuedWorkerTask(WorkerTaskFetchCollected(jid), HDFS._worker_task, HDFS._callback, :wrkr_all))
     end
 end
+
 
 ##
 # Job store and scheduler
@@ -159,6 +196,9 @@ type HdfsJobSchedInfo
     source_spec::MRInput                                    # job_id or url (optionally with wildcard)
     num_parts::Int
     num_parts_done::Int
+    num_pending_inits::Int
+    num_reduces::Int
+    num_reduces_done::Int
     state::Int
     state_info::Any
     red::Any
@@ -168,7 +208,7 @@ type HdfsJobSchedInfo
     end_time::Float64                                       # completed
 
     function HdfsJobSchedInfo(source_spec::MRInput)
-        new(source_spec, 0, 0, STATE_STARTING, nothing, nothing, RemoteRef(), time(), 0.0, 0.0)
+        new(source_spec, 0, 0, 0, 0, 0, STATE_STARTING, nothing, nothing, RemoteRef(), time(), 0.0, 0.0)
     end
 end
 
@@ -240,38 +280,12 @@ dmap(source::MRInput, fn_map::Function, fn_collect::Function) = dmapreduce(sourc
 function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
     prep_remotes()
 
-    # create and set a job ctx
     jid = _next_job_id()
     j = HdfsJobCtx(jid, source, fn_map, fn_collect, fn_reduce)
     _job_store[jid] = j
 
-    inp_typ = typeof(source)
-    fn_find_rec = source.reader_fn
-    @async begin
-        try 
-            # init job at all workers
-            @sync begin
-                for procid in 1:num_remotes()
-                    @async begin
-                        try 
-                            ret = remotecall_fetch(procid, HDFS._worker_init_job, jid, inp_typ, fn_find_rec, fn_map, fn_collect, fn_reduce)
-                            (ret != jid) && throw(ret)
-                        catch ex
-                            _debug && println("error initializing job $jid at $procid")
-                            _set_status(j, STATE_ERROR, ex)
-                        end
-                    end
-                end
-            end
-
-            # once created at all workers...
-            _debug && println("distributing blocks for job $jid")
-            _distribute(jid, source)
-        catch ex
-            _debug && println("error starting job $jid")
-            _set_status(j, STATE_ERROR, ex)
-        end
-    end
+    j.info.num_pending_inits = num_remotes()
+    queue_worker_task(QueuedWorkerTask(WorkerTaskInitJob(jid, typeof(source), source.reader_fn, fn_map, fn_collect, fn_reduce), HDFS._worker_task, HDFS._callback, :wrkr_all))
     jid
 end
 
@@ -311,10 +325,7 @@ results(j::HdfsJobCtx) = (status(j), j.info.red)
 function unload(jid::JobId)
     j = _job_store[jid]
     (j.info.state == STATE_RUNNING) && error("can't unload running job")
-
-    for procid in 1:num_remotes()
-        remotecall(procid, HDFS._worker_unload, jid)
-    end
+    queue_worker_task(QueuedWorkerTask(WorkerTaskUnloadJob(jid), HDFS._worker_task, nothing, :wrkr_all))
     delete!(_job_store, jid)
     jid
 end 
