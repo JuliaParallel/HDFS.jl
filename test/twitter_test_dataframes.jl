@@ -45,7 +45,7 @@ function do_dataframe_test(furl::String)
     println("")
     jstatus,total_count = results(j)
     println("completed with status: $jstatus")
-    if(jstatus == "success")
+    if(jstatus == "complete")
         println("results:")
         println("total number of smileys: $total_count")
     else

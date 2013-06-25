@@ -31,7 +31,7 @@ type HdfsFS
     end
 end
 
-type HdfsFile
+type HdfsFile <: IO
     fs::HdfsFS
     path::String
     ptr::Ptr{Void}

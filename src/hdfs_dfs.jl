@@ -50,7 +50,19 @@ function hdfs_open(fs::HdfsFS, path::String, mode::String, buffer_sz::Integer=0,
     return HdfsFile(fs, path, file)
 end
 
-hdfs_close(file::HdfsFile) = ccall((:hdfsCloseFile, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
+function hdfs_open(f::HdfsFile, mode::String, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
+    (C_NULL != f.ptr) && (0 != hdfs_close(f)) && error("error closing file")
+    fnew = hdfs_open(f.fs, f.path, mode, buffer_sz, replication, bsz)
+    f.ptr = fnew.ptr
+    fnew.ptr = C_NULL
+    f
+end
+
+function hdfs_close(file::HdfsFile) 
+    ret = ccall((:hdfsCloseFile, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
+    (0 == ret) && (file.ptr = C_NULL)
+    ret
+end
 
 function hdfs_exists(fs::HdfsFS, path::String) 
     ret = ccall((:hdfsExists, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
@@ -59,18 +71,18 @@ function hdfs_exists(fs::HdfsFS, path::String)
     (ret == 0)
 end
 
-hdfs_seek(file::HdfsFile, desired_pos) = ccall((:hdfsSeek, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64), file.fs.ptr, file.ptr, desired_pos)
+hdfs_seek(file::HdfsFile, desired_pos) = ccall((:hdfsSeek, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64), file.fs.ptr, file.ptr, int64(desired_pos))
 
 hdfs_tell(file::HdfsFile) = ccall((:hdfsTell, _libhdfs), Int64, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
 
-hdfs_read(file::HdfsFile, buff::Ptr{Void}, len::Integer) = ccall((:hdfsRead, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), file.fs.ptr, file.ptr, buff, int32(len))
+hdfs_read(file::HdfsFile, buff::Ptr, len::Integer) = ccall((:hdfsRead, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), file.fs.ptr, file.ptr, buff, int32(len))
 function hdfs_read(file::HdfsFile, len::Integer)
     buff = Array(Uint8, len) 
     (-1 == (r = hdfs_read(file, convert(Ptr{Void}, buff), len))) && error("error reading file: -1")
     (buff, r)
 end
 
-hdfs_pread(file::HdfsFile, position::Int64, buff::Ptr{Void}, len::Integer) = ccall((:hdfsPread, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64, Ptr{Void}, Int32), file.fs.ptr, file.ptr, position, buff, len)
+hdfs_pread(file::HdfsFile, position::Int64, buff::Ptr, len::Integer) = ccall((:hdfsPread, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64, Ptr{Void}, Int32), file.fs.ptr, file.ptr, position, buff, len)
 function hdfs_pread(file::HdfsFile, position::Int64, len::Integer)
     buff = Array(Uint8, len) 
     (-1 == (r = hdfs_pread(file, position, buff, len))) && error("error reading file: -1")
@@ -78,7 +90,7 @@ function hdfs_pread(file::HdfsFile, position::Int64, len::Integer)
 end
 
 #can be passed an ASCIIString (length not necessary in that case)
-hdfs_write(file::HdfsFile, buff::Ptr{Void}, len::Integer) = ccall((:hdfsWrite, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), file.fs.ptr, file.ptr, buff, int32(len))
+hdfs_write(file::HdfsFile, buff::Ptr, len::Integer) = ccall((:hdfsWrite, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), file.fs.ptr, file.ptr, buff, int32(len))
 hdfs_write(file::HdfsFile, buff::ASCIIString, len::Integer) = hdfs_write(file, convert(Ptr{Void}, buff.data), len)
 hdfs_write(file::HdfsFile, buff::ASCIIString) = hdfs_write(file, bytestring(buff), length(buff))
 
@@ -110,8 +122,9 @@ hdfs_mkdir(fs::HdfsFS, path::String) = ccall((:hdfsCreateDirectory, _libhdfs), I
 hdfs_set_replication(fs::HdfsFS, path::String, replication::Integer)=ccall((:hdfsSetReplication, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Int16), fs.ptr, bytestring(path), int16(replication))
 
 function hdfs_list_directory(fs::HdfsFS, path::String)
-    num_entries = zeros(Int32, 1)
+    num_entries = Int32[-1]
     info_ptr = ccall((:hdfsListDirectory, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}, Ptr{Int32}), fs.ptr, bytestring(path), num_entries)
+    (0 == num_entries[1]) && (return [])
     (C_NULL == info_ptr) && error(string("Error listing path ", path))
 
     ret = [HdfsFileInfo(x) for x in pointer_to_array(info_ptr, (int(num_entries[1]),))]
@@ -171,4 +184,82 @@ hdfs_chmod(fs::HdfsFS, path::String, mode::Int16) = ccall((:hdfsChmod, _libhdfs)
 
 hdfs_utime(fs::HdfsFS, path::String, mtime::Integer, atime::Integer) = ccall((:hdfsUtime, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, TimeT, TimeT), fs.ptr, path, convert(TimeT, mtime), convert(TimeT, atime))
 
+
+##
+# File system implementation for HdfsFS
+pwd(fs::HdfsFS) = urlparse(hdfs_pwd(fs)).url
+function cd(fs::HdfsFS, path::String)
+    hdfs_exists(fs, path) && (0 == hdfs_cd(fs, path)) && (return nothing)
+    error("no such file or directory $path")
+end
+mkdir(fs::HdfsFS, path::String) = (0 == hdfs_mkdir(fs, path)) ? nothing : error("error creating directory $path")
+mv(srcFS::HdfsFS, src::String, dstFS::HdfsFS, dst::String) = (srcFS == dstFS) ? mv(srcFs, src, dst) : (0 == hdfs_move(srcFS, src, dstFS, dst)) ? nothing : error("error moving file")
+mv(fs::HdfsFS, src::String, dst::String) = (0 == hdfs_rename(fs, src, dst)) ? nothing : error("error renaming file")
+rm(fs::HdfsFS, path::String) = (0 == hdfs_delete(fs, path)) ? nothing : error("error deleting $path")
+rmdir(fs::HdfsFS, path::String) = rm(fs, path)
+function readdir(fs::HdfsFS) 
+    offset = length(pwd(fs))+2
+    String[urlparse(fi.name).url[offset:] for fi in hdfs_list_directory(fs, ".")]
+end
+function readdir(fs::HdfsFS, path::String)
+    (path == ".") && (return readdir(fs))
+    p = pwd(fs)
+    cd(fs, path)
+    ret = readdir(fs)
+    cd(fs, p)
+    ret
+end
+
+
+##
+# IO implementation for HdfsFile
+# this is crap. should implement the array interface also
+open(fs::HdfsFS, path::String) = open(fs, path, "r")
+open(fs::HdfsFS, path::String, mode::String) = hdfs_open(fs, path, mode)
+close(f::HdfsFile) = hdfs_close(f)
+eof(f::HdfsFile) = (position(f) == filesize(f))
+
+read(f::HdfsFile, x::Type{Uint8}) = (hdfs_read(f, 1)[1])[1]
+function read{T}(f::HdfsFile, a::Array{T})
+    remaining = length(a)
+    while(remaining > 0)
+        ret = hdfs_read(f, pointer(a, length(a)-remaining), remaining)
+        (-1 == ret) && error("end of file")
+        remaining -= ret
+    end
+    a
+end
+readbytes(f::HdfsFile, nb::Integer) = bytestring(read(f, Array(Uint8, nb)))
+readall(f::HdfsFile) = readbytes(f, nb_available(f))
+
+function peek(f::HdfsFile)
+    ret = read(f, Uint8)
+    skip(f, -1)
+    ret
+end
+
+write(f::HdfsFile, p::Ptr, nb::Integer) = write(f, p, int(nb))
+write(f::HdfsFile, p::Ptr, nb::Int) = hdfs_write(f, p, nb)
+write(f::HdfsFile, x::Uint8) = write(f, Uint8[x])
+write{T}(f::HdfsFile, a::Array{T}, len) = write_sub(f, a, 1, length(a))
+write{T}(f::HdfsFile, a::Array{T}) = write(f, a, length(a))
+write_sub{T}(f::HdfsFile, a::Array{T}, offs, len) = isbits(T) ? write(f, pointer(a,offs), len*sizeof(T)) : error("$T is not bits type")
+
+flush(f::HdfsFile) = (hdfs_flush(f); nothing)
+nb_available(f::HdfsFile) = hdfs_available(f)
+function position(f::HdfsFile)
+    p = hdfs_tell(f)
+    (p >= 0) ? p : error("error getting current position")
+end
+
+stat(f::HdfsFile) = stat(f.fs, f.path)
+stat(fs::HdfsFS, path::String) = hdfs_get_path_info(fs, path)
+
+filesize(f::HdfsFile) = filesize(f.fs, f.path)
+filesize(fs::HdfsFS, path::String) = (stat(fs,path)).size
+
+seek(f::HdfsFile, n::Integer) = (0 == hdfs_seek(f, n))
+seekend(f::HdfsFile) = seek(f, filesize(f))
+seekstart(f::HdfsFile) = seek(f, 0)
+skip(f::HdfsFile, n::Integer) = seek(f, n+position(f))
 
