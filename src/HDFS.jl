@@ -1,6 +1,8 @@
 module HDFS
 
-import  Base.start, Base.done, Base.next, Base.wait
+import  Base.start, Base.done, Base.next, 
+        Base.wait,
+        Base.nb_available, Base.read, Base.eof, Base.position, Base.seekstart, Base.seekend, Base.skip, Base.seek, Base.peek
 
 export  hdfs_connect,
         hdfs_exists, hdfs_delete, 
@@ -16,11 +18,13 @@ export  hdfs_connect,
         dmap, dmapreduce, results, status, unload, wait, times, JobId, start_workers,
         # from hdfs_reader.jl
         MRInput, MRMapInput, MRFileInput,
-        HdfsReader, MapResultReader
+        HdfsReader, HdfsBlockStream, HdfsBlockReader, nb_available, read, eof, position, seekstart, seekend, skip, seek, peek, hdfs_read_all, hdfs_read_chunk, 
+        MapResultReader
 
 using ChainedVectors
 using URLParse
 using PTools
+using DataFrames
 
 global _debug = false
 function _set_debug(d)

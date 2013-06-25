@@ -102,3 +102,23 @@ function hdfs_find_rec_csv(rdr::HdfsReader, iter_status, rec_sep, col_sep, max_r
     return (nothing, true, final_pos+1)                      # next rec pos is beyond final pos to indicating end
 end
 
+##
+# make a dataframe out of the whole block and pass that as a record to map
+function hdfs_find_rec_array(rdr::HdfsBlockReader, iter_status, rec_sep='\n', col_sep=',')
+    (iter_status != nothing) && return (nothing, true, iter_status)
+    ios = get_stream(rdr)
+    dlmarr = readdlm(ios, col_sep, rec_sep)
+    return (dlmarr, false, position(ios))
+end
+
+##
+# make a dataframe out of the whole block and pass that as a record to map
+function hdfs_find_rec_table(rdr::HdfsBlockReader, iter_status, rec_sep='\n', col_sep=',')
+    dlmarr, iseof, iter_status = hdfs_find_rec_array(rdr, iter_status, rec_sep, col_sep)
+    #ios = get_stream(rdr)
+    #tbl = readtable(ios)
+    df = (nothing == dlmarr) ? nothing : DataFrame(dlmarr)
+    #println("hdfs_find_rec_table got $dlmarr")
+    return (df, iseof, iter_status)
+end
+

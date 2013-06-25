@@ -40,4 +40,5 @@ type MRMapInput <: MRInput
     end
 end
 
-
+input_reader_type(inp::MRMapInput) = (MRMapInput, nothing)
+get_input_reader(::Type{MRMapInput}, ::Any) = MapResultReader()

@@ -22,7 +22,7 @@ end
 
 type WorkerTaskInitJob <:WorkerTask
     jid::JobId
-    inp_typ::DataType
+    inp_typ::Any
     fn_find_rec::Function
     fn_map::Function
     fn_collect::Function
@@ -232,10 +232,8 @@ type HdfsJobCtx
     end
 
     # constructor at the worker end
-    function HdfsJobCtx(jid::JobId, inp_typ::DataType, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
-        rdr = nothing
-        (inp_typ == MRFileInput) && (rdr = HdfsReader())
-        (inp_typ == MRMapInput) && (rdr = MapResultReader())
+    function HdfsJobCtx(jid::JobId, inp_typ, fn_find_rec::Function, fn_map::Function, fn_collect::Function, fn_reduce::FuncNone)
+        rdr = get_input_reader(inp_typ...)
         new(jid, fn_find_rec, fn_map, fn_collect, fn_reduce, HdfsJobRunInfo(rdr,nothing))
     end
 end
@@ -285,7 +283,7 @@ function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_
     _job_store[jid] = j
 
     j.info.num_pending_inits = num_remotes()
-    queue_worker_task(QueuedWorkerTask(WorkerTaskInitJob(jid, typeof(source), source.reader_fn, fn_map, fn_collect, fn_reduce), HDFS._worker_task, HDFS._callback, :wrkr_all))
+    queue_worker_task(QueuedWorkerTask(WorkerTaskInitJob(jid, input_reader_type(source), source.reader_fn, fn_map, fn_collect, fn_reduce), HDFS._worker_task, HDFS._callback, :wrkr_all))
     jid
 end
 
