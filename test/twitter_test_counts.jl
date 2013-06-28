@@ -30,20 +30,36 @@
 # 
 
 using HDFS
+using DataFrames
 
 ##
 # find smiley records from HDFS CSV file
-find_count_of_typ(r::HdfsReader, next_rec_pos, ttyp::String) = HDFS.hdfs_find_rec_csv(r, next_rec_pos, '\n', '\t', 1024, (ttyp, nothing, nothing, nothing))
+find_recs_as_df(r, next_rec_pos) = HDFS.find_rec(r, next_rec_pos, DataFrame, '\n', '\t')
 
-function map_count_monthly(rec, tag::Regex, combine::Bool)
-    ((nothing == rec) || (length(rec) == 0) || !ismatch(tag, rec[4])) && return []
+#find_count_of_typ(r::HdfsReader, next_rec_pos, ttyp::String) = HDFS.hdfs_find_rec_csv(r, next_rec_pos, '\n', '\t', 1024, (ttyp, nothing, nothing, nothing))
+
+function midx(yyyymmdd)
+    yyyymmdd = int(yyyymmdd)
+    ypos = (yyyymmdd > 10^9) ? 10^6 : 10^4
+    y = int(floor(yyyymmdd/ypos))
+    m = int(floor((yyyymmdd - ypos*y)/(ypos/100)))
+    12*(y-2006)+m
+end
+function map_count_monthly(rec, tag_type::String, tag::Regex)
+    ((nothing == rec) || (nrow(rec) == 0)) && return []
     #println(rec)
 
-    ts = rec[2]
-    ts_year = int(ts[1:4])
-    ts_mon = int(ts[5:6])
-    month_idx = 12*(ts_year-2006) + ts_mon  # twitter begun from 2006
-    [(combine ? tag.pattern : rec[4], month_idx, int(rec[3]))]
+    filtrows = Int[]
+    for (i,v) in enumerate(rec[4])
+        (tag_type == rec[i,1]) && ismatch(tag,v) && push!(filtrows,i)
+    end
+    subrec = subset(rec, filtrows)
+    (nrow(subrec) == 0) && return []
+
+    subrec = DataFrame({subrec[1], PooledDataArray(map(x->midx(x), subrec[2])), subrec[3], subrec[4]})
+    monthsum = by(subrec, :x2, x -> sum(x[:x3]))
+
+    [(tag.pattern, monthsum[idx,1], monthsum[idx,2]) for idx in 1:nrow(monthsum)]
 end
 
 function collect_count_monthly(results, rec)
@@ -171,7 +187,7 @@ function do_plot_counts(furl::String, typ::String, tag::String)
     ##
     # function body begin
     println("starting dmapreduce...")
-    j_mon = dmapreduce(MRFileInput([furl], (x,y)->find_count_of_typ(x,y,typ)), x->map_count_monthly(x, Regex(tag), true), collect_count_monthly, reduce_count_monthly)
+    j_mon = dmapreduce(MRFileInput([furl], (x,y)->find_recs_as_df(x,y)), x->map_count_monthly(x, "smiley", Regex(tag)), collect_count_monthly, reduce_count_monthly)
 
     println("waiting for dmapreduce to finish...")
     wait_results()

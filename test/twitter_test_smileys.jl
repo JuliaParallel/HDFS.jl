@@ -59,7 +59,7 @@ using Gaston
 
 ##
 # find smiley records from HDFS CSV file
-find_smiley(r::HdfsReader, next_rec_pos) = HDFS.hdfs_find_rec_csv(r, next_rec_pos, '\n', '\t', 1024, ("smiley", nothing, nothing, nothing))
+find_smiley(r, next_rec_pos) = HDFS.find_rec(r, next_rec_pos, Vector, '\n', '\t', ("smiley", nothing, nothing, nothing))
 
 ##
 # reduce smiley counts or array of counts
@@ -103,7 +103,7 @@ function collect_yearly(results, rec)
     results
 end
 
-find_yearly(r::MapResultReader, iter_status) = HDFS.mr_result_find_rec(r, iter_status)
+find_yearly(r::MapResultReader, iter_status) = HDFS.find_rec(r, iter_status)
 map_total_from_yearly(rec) = [(rec[1], sum(rec[2]))]
 
 
@@ -141,7 +141,7 @@ function collect_monthly(results, rec)
     results
 end
 
-find_monthly(r::MapResultReader, iter_status) = HDFS.mr_result_find_rec(r, iter_status)
+find_monthly(r::MapResultReader, iter_status) = HDFS.find_rec(r, iter_status)
 function map_yearly_from_monthly(rec) 
     b = rec[2]
     ret = Array(Tuple,0)

@@ -3,11 +3,12 @@
 # used in tweets between year 2006 to 2009, based on data from infochimps.
 
 using HDFS
+using DataFrames
 using Gaston
 
 ##
 # find smiley records from HDFS CSV file
-find_smiley_df(r, next_rec_pos) = HDFS.hdfs_find_rec_table(r, next_rec_pos, '\n', '\t')
+find_smiley_df(r, next_rec_pos) = HDFS.find_rec(r, next_rec_pos, DataFrame, '\n', '\t')
 
 ##
 # reduce smiley counts or array of counts
@@ -30,7 +31,7 @@ end
 
 function do_dataframe_test(furl::String)
     println("starting dmapreduce job...")
-    j = dmapreduce(MRFileInput([furl], find_smiley_df, "stream"), map_total, collect_total, reduce_smiley_df)
+    j = dmapreduce(MRFileInput([furl], find_smiley_df), map_total, collect_total, reduce_smiley_df)
     println("waiting for jobs to finish...")
     loopstatus = true
     while(loopstatus)

@@ -23,10 +23,11 @@ export  hdfs_connect,
         dmap, dmapreduce, results, status, unload, wait, times, JobId, start_workers,
         # from hdfs_reader.jl
         MRInput, MRMapInput, MRFileInput,
-        HdfsReader, HdfsBlockStream, HdfsBlockReader, nb_available, read, eof, position, seekstart, seekend, skip, seek, peek, hdfs_read_all, hdfs_read_chunk, 
+        BlockIO,
+        HdfsReader, HdfsBlockReader, nb_available, read, eof, position, seekstart, seekend, skip, seek, peek, hdfs_read_all, hdfs_read_chunk, 
         MapResultReader
 
-using ChainedVectors
+#using ChainedVectors
 using URLParse
 using PTools
 using DataFrames
@@ -37,6 +38,7 @@ function _set_debug(d)
     _debug = d
 end
 
+include("blockio.jl")
 include("hdfs_types.jl")
 include("hdfs_reader.jl")
 include("map_result_reader.jl")

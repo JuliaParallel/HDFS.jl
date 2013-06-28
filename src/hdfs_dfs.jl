@@ -58,6 +58,20 @@ function hdfs_open(f::HdfsFile, mode::String, buffer_sz::Integer=0, replication:
     f
 end
 
+function hdfs_open(url::String, mode::String, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
+    url, frag = urldefrag(url)
+    # new source
+    comps = urlparse(url)
+    uname = username(comps)
+    hname = hostname(comps)
+    portnum = port(comps)
+    fname = comps.url
+
+    fs = hdfs_connect(hname, portnum, (nothing == uname)?"":uname)
+    hdfs_open(fs, fname, mode, buffer_sz, replication, bsz)
+end
+
+
 function hdfs_close(file::HdfsFile) 
     ret = ccall((:hdfsCloseFile, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
     (0 == ret) && (file.ptr = C_NULL)
@@ -223,7 +237,7 @@ read(f::HdfsFile, x::Type{Uint8}) = (hdfs_read(f, 1)[1])[1]
 function read{T}(f::HdfsFile, a::Array{T})
     remaining = length(a)
     while(remaining > 0)
-        ret = hdfs_read(f, pointer(a, length(a)-remaining), remaining)
+        ret = hdfs_read(f, pointer(a, length(a)-remaining+1), remaining)
         (-1 == ret) && error("end of file")
         remaining -= ret
     end
