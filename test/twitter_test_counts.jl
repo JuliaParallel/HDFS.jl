@@ -30,13 +30,13 @@
 # 
 
 using HDFS
+using HDFS.MapReduce
 using DataFrames
 
 ##
 # find smiley records from HDFS CSV file
-find_recs_as_df(r, next_rec_pos) = HDFS.find_rec(r, next_rec_pos, DataFrame, '\n', '\t')
+find_recs_as_df(r, next_rec_pos) = HDFS.MapReduce.find_rec(r, next_rec_pos, DataFrame, '\n', '\t')
 
-#find_count_of_typ(r::HdfsReader, next_rec_pos, ttyp::String) = HDFS.hdfs_find_rec_csv(r, next_rec_pos, '\n', '\t', 1024, (ttyp, nothing, nothing, nothing))
 
 function midx(yyyymmdd)
     yyyymmdd = int(yyyymmdd)
@@ -80,7 +80,7 @@ function collect_count_monthly(results, rec)
     results
 end
 
-reduce_count_monthly(reduced, results...) = HDFS.reduce_dicts(+, reduced, results...)
+reduce_count_monthly(reduced, results...) = HDFS.MapReduce.reduce_dicts(+, reduced, results...)
 
 
 

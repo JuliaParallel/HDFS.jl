@@ -3,12 +3,13 @@
 # used in tweets between year 2006 to 2009, based on data from infochimps.
 
 using HDFS
+using HDFS.MapReduce
 using DataFrames
 using Gaston
 
 ##
 # find smiley records from HDFS CSV file
-find_smiley_df(r, next_rec_pos) = HDFS.find_rec(r, next_rec_pos, DataFrame, '\n', '\t')
+find_smiley_df(r, next_rec_pos) = HDFS.MapReduce.find_rec(r, next_rec_pos, DataFrame, '\n', '\t')
 
 ##
 # reduce smiley counts or array of counts

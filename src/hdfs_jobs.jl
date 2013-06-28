@@ -163,7 +163,7 @@ function _callback(t::WorkerTaskFileInfo, ret)
             blk_dist = ret.file_blocks[idx]
             nparts += length(blk_dist)
             for (blk_id,macs) in enumerate(blk_dist)
-                queue_worker_task(QueuedWorkerTask(WorkerTaskMap(jid, string(fname, '#', blk_id)), HDFS._worker_task, HDFS._callback, macs))
+                queue_worker_task(QueuedWorkerTask(WorkerTaskMap(jid, string(fname, '#', blk_id)), HDFS.MapReduce._worker_task, HDFS.MapReduce._callback, macs))
             end
         end
         _start_running(jid, nparts)
@@ -185,7 +185,7 @@ function _callback(t::WorkerTaskMap, ret)
     if(j.info.num_parts == j.info.num_parts_done)
         (j.fn_reduce == nothing) && (return _set_status(j, STATE_COMPLETE))
         j.info.num_reduces = num_remotes()
-        queue_worker_task(QueuedWorkerTask(WorkerTaskFetchCollected(jid), HDFS._worker_task, HDFS._callback, :wrkr_all))
+        queue_worker_task(QueuedWorkerTask(WorkerTaskFetchCollected(jid), HDFS.MapReduce._worker_task, HDFS.MapReduce._callback, :wrkr_all))
     end
 end
 
@@ -258,7 +258,7 @@ function _start_running(jid::JobId, nparts)
 end
 
 function _distribute(jid::JobId, source::MRMapInput)
-    qtarr = map(x->QueuedWorkerTask(WorkerTaskMap(jid, string(x)), HDFS._worker_task, HDFS._callback, :wrkr_all), source.job_list)
+    qtarr = map(x->QueuedWorkerTask(WorkerTaskMap(jid, string(x)), HDFS.MapReduce._worker_task, HDFS.MapReduce._callback, :wrkr_all), source.job_list)
     for src_jid in source.job_list
         if(STATE_COMPLETE != wait(src_jid))
             j = _job_store[jid]
@@ -271,7 +271,7 @@ function _distribute(jid::JobId, source::MRMapInput)
     _start_running(jid, nparts)
 end
 function _distribute(jid::JobId, source::MRFileInput) 
-    queue_worker_task(QueuedWorkerTask(WorkerTaskFileInfo(jid,source), HDFS._worker_task, HDFS._callback, :wrkr_any))
+    queue_worker_task(QueuedWorkerTask(WorkerTaskFileInfo(jid,source), HDFS.MapReduce._worker_task, HDFS.MapReduce._callback, :wrkr_any))
 end
 
 dmap(source::MRInput, fn_map::Function, fn_collect::Function) = dmapreduce(source, fn_map, fn_collect, nothing)
@@ -283,7 +283,7 @@ function dmapreduce(source::MRInput, fn_map::Function, fn_collect::Function, fn_
     _job_store[jid] = j
 
     j.info.num_pending_inits = num_remotes()
-    queue_worker_task(QueuedWorkerTask(WorkerTaskInitJob(jid, input_reader_type(source), source.reader_fn, fn_map, fn_collect, fn_reduce), HDFS._worker_task, HDFS._callback, :wrkr_all))
+    queue_worker_task(QueuedWorkerTask(WorkerTaskInitJob(jid, input_reader_type(source), source.reader_fn, fn_map, fn_collect, fn_reduce), HDFS.MapReduce._worker_task, HDFS.MapReduce._callback, :wrkr_all))
     jid
 end
 
@@ -323,7 +323,7 @@ results(j::HdfsJobCtx) = (status(j), j.info.red)
 function unload(jid::JobId)
     j = _job_store[jid]
     (j.info.state == STATE_RUNNING) && error("can't unload running job")
-    queue_worker_task(QueuedWorkerTask(WorkerTaskUnloadJob(jid), HDFS._worker_task, nothing, :wrkr_all))
+    queue_worker_task(QueuedWorkerTask(WorkerTaskUnloadJob(jid), HDFS.MapReduce._worker_task, nothing, :wrkr_all))
     delete!(_job_store, jid)
     jid
 end 

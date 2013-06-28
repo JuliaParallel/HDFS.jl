@@ -68,7 +68,7 @@ function find_rec(rdr::HdfsBlockReader, iter_status, t::Type{DataFrame}, rec_sep
     #df = readtable(ios, header=false, separator=col_sep, nrows=sz, buffersize=sz)
     #return (df, false, position(ios))
 
-    (dlmarr, iseof, iter_status) = find_rec(rdr, iter_status, Array, rec_sep, col_sep)
+    (dlmarr, iseof, iter_status) = find_rec(rdr, iter_status, Matrix, rec_sep, col_sep)
     df = (nothing == dlmarr) ? nothing : DataFrame(dlmarr)
     #println("hdfs_find_rec_table got $dlmarr")
     (df, iseof, iter_status)

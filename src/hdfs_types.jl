@@ -11,12 +11,6 @@ else
     typealias TimeT Int32
 end
 
-abstract MapInputReader 
-abstract MRInput
-
-typealias JobId     Int64
-typealias FuncNone  Union(Function,Nothing)
-
 
 ## used to enforce types ##
 type HdfsFS

@@ -55,15 +55,16 @@
 # 10. plot the results 
 
 using HDFS
+using HDFS.MapReduce
 using Gaston
 
 ##
 # find smiley records from HDFS CSV file
-find_smiley(r, next_rec_pos) = HDFS.find_rec(r, next_rec_pos, Vector, '\n', '\t', ("smiley", nothing, nothing, nothing))
+find_smiley(r, next_rec_pos) = HDFS.MapReduce.find_rec(r, next_rec_pos, Vector, '\n', '\t', ("smiley", nothing, nothing, nothing))
 
 ##
 # reduce smiley counts or array of counts
-reduce_smiley(reduced, results...) = HDFS.reduce_dicts(+, reduced, results...)
+reduce_smiley(reduced, results...) = HDFS.MapReduce.reduce_dicts(+, reduced, results...)
 
 
 ##
@@ -73,7 +74,7 @@ function map_total(rec)
     [(rec[4], int(rec[3]))]
 end
 
-collect_total(results, rec) = (length(rec) == 0) ? results : HDFS.collect_in_dict(+, results, rec)
+collect_total(results, rec) = (length(rec) == 0) ? results : HDFS.MapReduce.collect_in_dict(+, results, rec)
 
 
 ##
@@ -103,7 +104,7 @@ function collect_yearly(results, rec)
     results
 end
 
-find_yearly(r::MapResultReader, iter_status) = HDFS.find_rec(r, iter_status)
+find_yearly(r::MapResultReader, iter_status) = HDFS.MapReduce.find_rec(r, iter_status)
 map_total_from_yearly(rec) = [(rec[1], sum(rec[2]))]
 
 
@@ -141,7 +142,7 @@ function collect_monthly(results, rec)
     results
 end
 
-find_monthly(r::MapResultReader, iter_status) = HDFS.find_rec(r, iter_status)
+find_monthly(r::MapResultReader, iter_status) = HDFS.MapReduce.find_rec(r, iter_status)
 function map_yearly_from_monthly(rec) 
     b = rec[2]
     ret = Array(Tuple,0)
