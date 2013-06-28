@@ -74,16 +74,18 @@ For a completed job, returns the time (seconds) it took:
 
 
 #### Data sources and the reader function
-Access to data sources are provided by lower level reader types, specific to each source. All reader types are of the abstract type **MapInputReader**. In the current implementation **HDFSFileReader** provides functionality to read HDFS files and **MapResultReader** assists reading previous map results. 
+Access to data sources are provided by lower level reader types, specific to each source. All reader types are of the abstract type **MapInputReader**. In the current implementation **HDFSBlockReader** provides functionality to read HDFS files, **FsBlockReader** is used to read disk files and **MapResultReader** assists reading previous map results. 
 
-A data source for HDFS map-reduce is an instance of abstract type `MRInput`. Two concrete implementations of it exist:
+A data source for map-reduce is an instance of abstract type `MRInput`. Following concrete implementations of it exist:
 - MRMapInput(job_list, reader_fn::Function)
     - job_list is a list of job ids pointing to previous map results
     - reader_fn is described below
-- MRFileInput(file_list, reader_fn::Function)
+- MRHdfsFileInput(file_list, reader_fn::Function)
     - file_list is a list of HDFS URLs, pointing to HDFS directories or files. The last part of the URL can optionally contain a regular expression targeted to pick up multiple files.
     - e.g.: `hdfs://username@hdfs\_host:port/folderpath/filepath`, or `hdfs://username@hdfs\_host:port/folderpath`, or `hdfs://username@hdfs\_host:port/folderpath/.*\.csv`
     - reader_fn is described below
+- MRFsFileINput(file_list, reader_fn::Function, block_sz::Int)
+    - similar to `MRHdfsFileInput` but for regular file system.
 
 The reader\_fn uses a supplied MapInputReader instance to fetch one logical chunk of data. It can optionally include optimimizations to filter only interesting data for the mapper. The reader and the reader\_fn are combined to form an iterator that feeds the map function. The reader function essentially provides all the logic for iterating over records in the file in a single function.
 

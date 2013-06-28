@@ -210,6 +210,8 @@ mkdir(fs::HdfsFS, path::String) = (0 == hdfs_mkdir(fs, path)) ? nothing : error(
 mv(srcFS::HdfsFS, src::String, dstFS::HdfsFS, dst::String) = (srcFS == dstFS) ? mv(srcFs, src, dst) : (0 == hdfs_move(srcFS, src, dstFS, dst)) ? nothing : error("error moving file")
 mv(fs::HdfsFS, src::String, dst::String) = (0 == hdfs_rename(fs, src, dst)) ? nothing : error("error renaming file")
 rm(fs::HdfsFS, path::String) = (0 == hdfs_delete(fs, path)) ? nothing : error("error deleting $path")
+cp(srcFS::HdfsFS, src::String, dstFS::HdfsFS, dst::String) = (0 == hdfs_copy(srcFS, src, dstFS, dst)) ? nothing : error("error copying file")
+cp(fs::HdfsFS, src::String, dst::String) = cp(fs, src, fs, dst)
 rmdir(fs::HdfsFS, path::String) = rm(fs, path)
 function readdir(fs::HdfsFS) 
     offset = length(pwd(fs))+2
@@ -224,12 +226,13 @@ function readdir(fs::HdfsFS, path::String)
     ret
 end
 
+isdir(fs::HdfsFS, path::String) = hdfs_is_directory(fs, path)
 
 ##
 # IO implementation for HdfsFile
 # this is crap. should implement the array interface also
-open(fs::HdfsFS, path::String) = open(fs, path, "r")
-open(fs::HdfsFS, path::String, mode::String) = hdfs_open(fs, path, mode)
+open(fs::HdfsFS, path::String, mode::String="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(fs, path, mode, buffer_sz, replication, bsz)
+open(f::HdfsFile, mode::String="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(f, mode, buffer_sz, replication, bsz)
 close(f::HdfsFile) = hdfs_close(f)
 eof(f::HdfsFile) = (position(f) == filesize(f))
 
