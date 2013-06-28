@@ -22,7 +22,7 @@
 #    this would demonstrate how we can use results from earlier maps in further map-reduce operations.
 #
 #    first, get a monthly summary
-#    julia> j_mon = dmapreduce(MRFileInput(["hdfs://host:port/twitter_daily_summary.tsv"], find_smiley), map_monthly, collect_monthly, reduce_smiley)
+#    julia> j_mon = dmapreduce(MRHdfsFileInput(["hdfs://host:port/twitter_daily_summary.tsv"], find_smiley), map_monthly, collect_monthly, reduce_smiley)
 #
 #    next, once the above is done, get a yearly summary from the monthly data
 #    julia> j2 = dmap(MRMapInput([j_mon], find_monthly), map_yearly_from_monthly, collect_yearly)
@@ -32,7 +32,7 @@
 #    julia> j_fin = dmapreduce(MRMapInput([j2], find_yearly), map_total_from_yearly, collect_total, reduce_smiley)
 #
 #    if we didn't need the monthly summary, the yearly summary could have been gotten more efficiently as:
-#    julia> j_fin = dmapreduce(MRFileInput(["hdfs://host:port/twitter_daily_summary.tsv"], find_smiley), map_total, collect_total, reduce_smiley)
+#    julia> j_fin = dmapreduce(MRHdfsFileInput(["hdfs://host:port/twitter_daily_summary.tsv"], find_smiley), map_total, collect_total, reduce_smiley)
 #
 # 6. get the total result out
 #    julia> wait(j_fin)
@@ -156,7 +156,7 @@ end
  
 function do_smiley_tests(furl::String)
     println("starting dmapreduce jobs...")
-    j_mon = dmapreduce(MRFileInput([furl], find_smiley), map_monthly, collect_monthly, reduce_smiley)
+    j_mon = dmapreduce(MRHdfsFileInput([furl], find_smiley), map_monthly, collect_monthly, reduce_smiley)
     j2 = dmap(MRMapInput([j_mon], find_monthly), map_yearly_from_monthly, collect_yearly)
     j_fin = dmapreduce(MRMapInput([j2], find_yearly), map_total_from_yearly, collect_total, reduce_smiley)
 

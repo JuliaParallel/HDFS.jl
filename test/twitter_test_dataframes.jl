@@ -13,7 +13,7 @@ find_smiley_df(r, next_rec_pos) = HDFS.MapReduce.find_rec(r, next_rec_pos, DataF
 
 ##
 # reduce smiley counts or array of counts
-reduce_smiley_df(reduced, results...) = +((nothing == reduced) ? 0 : reduced, results...)
+reduce_smiley_df(reduced, results...) = +((nothing == reduced) ? 0 : reduced, filter(x->(x!=nothing),results)...)
 
 
 ##
@@ -30,9 +30,10 @@ function collect_total(results, rec)
     (results == nothing) ? rec : (results+rec)
 end
 
-function do_dataframe_test(furl::String)
+function do_dataframe_test(furl::String, use_hdfs=true)
     println("starting dmapreduce job...")
-    j = dmapreduce(MRFileInput([furl], find_smiley_df), map_total, collect_total, reduce_smiley_df)
+    finp = use_hdfs ? MRHdfsFileInput([furl], find_smiley_df) : MRFsFileInput([furl], find_smiley_df, 1024*16)
+    j = dmapreduce(finp, map_total, collect_total, reduce_smiley_df)
     println("waiting for jobs to finish...")
     loopstatus = true
     while(loopstatus)

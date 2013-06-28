@@ -6,7 +6,9 @@ type BlockIO <: IO
 
     function find_end_pos(bio::BlockIO, end_byte::Char)
         seekend(bio)
-        while(!eof(bio.s) && (end_byte != read(bio, Uint8))) continue end
+        try
+            while(!eof(bio.s) && (end_byte != read(bio, Uint8))) continue end
+        end
         position(bio.s)
     end
     function find_start_pos(bio::BlockIO, end_byte::Char)

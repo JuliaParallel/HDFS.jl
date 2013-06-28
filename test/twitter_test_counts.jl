@@ -187,7 +187,7 @@ function do_plot_counts(furl::String, typ::String, tag::String)
     ##
     # function body begin
     println("starting dmapreduce...")
-    j_mon = dmapreduce(MRFileInput([furl], (x,y)->find_recs_as_df(x,y)), x->map_count_monthly(x, "smiley", Regex(tag)), collect_count_monthly, reduce_count_monthly)
+    j_mon = dmapreduce(MRHdfsFileInput([furl], (x,y)->find_recs_as_df(x,y)), x->map_count_monthly(x, "smiley", Regex(tag)), collect_count_monthly, reduce_count_monthly)
 
     println("waiting for dmapreduce to finish...")
     wait_results()

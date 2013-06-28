@@ -17,7 +17,7 @@ end
 
 type WorkerTaskFileInfo <: WorkerTask
     jid::JobId
-    source::MRFileInput
+    source::MRHdfsFileInput
 end
 
 type WorkerTaskInitJob <:WorkerTask
@@ -156,7 +156,7 @@ function _callback(t::WorkerTaskFileInfo, ret)
     jid = t.jid
     j = _job_store[jid] 
     try
-        !isa(ret, MRFileInput) && throw(ret)
+        !isa(ret, MRHdfsFileInput) && throw(ret)
 
         nparts = 0
         for (idx,fname) in enumerate(ret.file_list)
@@ -270,8 +270,26 @@ function _distribute(jid::JobId, source::MRMapInput)
     for qt in qtarr queue_worker_task(qt) end
     _start_running(jid, nparts)
 end
-function _distribute(jid::JobId, source::MRFileInput) 
+function _distribute(jid::JobId, source::MRHdfsFileInput) 
     queue_worker_task(QueuedWorkerTask(WorkerTaskFileInfo(jid,source), HDFS.MapReduce._worker_task, HDFS.MapReduce._callback, :wrkr_any))
+end
+function _distribute(jid::JobId, source::MRFsFileInput)
+    j = _job_store[jid] 
+    try
+        expand_file_inputs(source)
+        nparts = 0
+        for (idx,fname) in enumerate(source.file_list)
+            nfileblks = int(ceil(source.file_info[idx].size/source.block_sz))
+            nparts += nfileblks
+            for blk_id in 1:nfileblks
+                queue_worker_task(QueuedWorkerTask(WorkerTaskMap(jid, string(fname, '#', blk_id)), HDFS.MapReduce._worker_task, HDFS.MapReduce._callback, :wrkr_any))
+            end
+        end
+        _start_running(jid, nparts)
+    catch ex
+        _debug && println("error starting job $(jid)")
+        _set_status(j, STATE_ERROR, ex)
+    end
 end
 
 dmap(source::MRInput, fn_map::Function, fn_collect::Function) = dmapreduce(source, fn_map, fn_collect, nothing)

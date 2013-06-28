@@ -1,6 +1,6 @@
 ##
 # MapInputReader to read block sized dataframes
-type HdfsBlockReader <: MapInputReader
+type HdfsBlockReader <: MapStreamInputReader
     hbr::BlockIO
     end_byte::Union(Char,Nothing)
     function HdfsBlockReader(url::String="", end_byte::Union(Char,Nothing)=nothing)
@@ -25,7 +25,7 @@ end
 
 ##
 # Input for map
-type MRFileInput <: MRInput
+type MRHdfsFileInput <: MRInput
     source_spec
     reader_fn::Function
 
@@ -33,16 +33,16 @@ type MRFileInput <: MRInput
     file_info
     file_blocks
 
-    function MRFileInput(source_spec, reader_fn::Function, rdr_type::String="")
+    function MRHdfsFileInput(source_spec, reader_fn::Function, rdr_type::String="")
         new(source_spec, reader_fn, nothing, nothing, nothing)
     end
 end
 
 # allowed types: buffer, stream
-input_reader_type(inp::MRFileInput) = (MRFileInput, "")
-get_input_reader(::Type{MRFileInput}, rdr_typ::String) = HdfsBlockReader("", '\n')
+input_reader_type(inp::MRHdfsFileInput) = (MRHdfsFileInput, "")
+get_input_reader(::Type{MRHdfsFileInput}, rdr_typ::String) = HdfsBlockReader("", '\n')
 
-function expand_file_inputs(inp::MRFileInput)
+function expand_file_inputs(inp::MRHdfsFileInput)
     fl = ASCIIString[]
     infol = HdfsFileInfo[]
     blockl = {}

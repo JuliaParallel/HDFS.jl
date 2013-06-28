@@ -51,7 +51,7 @@ end
 
 ##
 # make a dataframe out of the whole block and pass that as a record to map
-function find_rec(rdr::HdfsBlockReader, iter_status, t::Type{Matrix}, rec_sep::Char='\n', col_sep::Char=',')
+function find_rec(rdr::MapStreamInputReader, iter_status, t::Type{Matrix}, rec_sep::Char='\n', col_sep::Char=',')
     (iter_status != nothing) && return (nothing, true, iter_status)
     ios = get_stream(rdr)
     dlmarr = readdlm(ios, col_sep, rec_sep)
@@ -60,7 +60,7 @@ end
 
 ##
 # make a dataframe out of the whole block and pass that as a record to map
-function find_rec(rdr::HdfsBlockReader, iter_status, t::Type{DataFrame}, rec_sep::Char='\n', col_sep::Char=',')
+function find_rec(rdr::MapStreamInputReader, iter_status, t::Type{DataFrame}, rec_sep::Char='\n', col_sep::Char=',')
     #(iter_status != nothing) && return (nothing, true, iter_status)
     #ios = get_stream(rdr)
     #sz = nb_available(ios)
@@ -74,7 +74,7 @@ function find_rec(rdr::HdfsBlockReader, iter_status, t::Type{DataFrame}, rec_sep
     (df, iseof, iter_status)
 end
 
-function find_rec(rdr::HdfsBlockReader, iter_status, t::Type{Vector}, rec_sep::Char='\n', col_sep::Char=',', filters::Tuple=())
+function find_rec(rdr::MapStreamInputReader, iter_status, t::Type{Vector}, rec_sep::Char='\n', col_sep::Char=',', filters::Tuple=())
     ios = get_stream(rdr)
     eof(ios) && return(nothing, true, iter_status)
     # TODO: use rec_sep, split into substrings, coltype support
