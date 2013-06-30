@@ -1,7 +1,7 @@
 ## HDFS API
 
-These are wrappers over HDFS C APIs in `libhdfs`.
-File `test/dfs_test.jl` has examples that illustrate API usage.
+Available in module `HDFS`, these are wrappers over HDFS C APIs in `libhdfs`.
+Files `test/dfs_test1.jl` and `test/dfs_test2.jl` have examples that illustrate API usage.
 
 ### Types
 

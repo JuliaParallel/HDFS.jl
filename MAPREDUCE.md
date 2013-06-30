@@ -1,6 +1,6 @@
 ## The HDFS Map Reduce Interface
 
-The Julia HDFS map-reduce framework is intended for scenarios where the working dataset would fit into distributed memory (irrespective of the input dataset which can still be arbitarily large). Solving problems where the working dataset would be larger than available memory is still possible, but would require one to implement the sorting and shuffling logic between the map and reduce steps. Using Hadoop map-reduce is a better option in such cases, till such support is available in Julia.
+Available as module `HDFS.MapReduce`, this map-reduce framework is intended for scenarios where the working dataset would fit into distributed memory (irrespective of the input dataset which can still be arbitarily large). Solving problems where the working dataset would be larger than available memory is still possible, but would require one to implement the sorting and shuffling logic between the map and reduce steps. Using Hadoop map-reduce is a better option in such cases, till such support is available in Julia.
 
 
 **dmap**( *data_source* , *map_fn* , *collect_fn* ) &rarr; *jobid*
@@ -143,7 +143,6 @@ A sample test script is provided in the test folder that works on curated twitte
 - Better scheduling of blocks across processing nodes
 - Distributed reduction step
 - Scalability improvements, e.g. multiple tasks per node, rack awareness
-- Ability to work on multiple small files, instead of one large file spanning blocks
 - Resilience to node failure
 - API usability (convenience julia macros/methods to make working with HDFS intuitive)
 - Integrate other distributed storage systems: MapR, Cassandra, MongoDB etc
