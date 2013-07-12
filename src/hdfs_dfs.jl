@@ -236,14 +236,17 @@ open(f::HdfsFile, mode::String="r", buffer_sz::Integer=0, replication::Integer=0
 close(f::HdfsFile) = hdfs_close(f)
 eof(f::HdfsFile) = (position(f) == filesize(f))
 
-read(f::HdfsFile, x::Type{Uint8}) = (hdfs_read(f, 1)[1])[1]
+const _sb = Array(Uint8, 1)
+read(f::HdfsFile, x::Type{Uint8}) = read(f, _sb)[1]
 function read{T}(f::HdfsFile, a::Array{T})
-    remaining = length(a)
-    while(remaining > 0)
-        ret = hdfs_read(f, pointer(a, length(a)-remaining+1), remaining)
-        (-1 == ret) && error("end of file")
+    remaining = length(a)*sizeof(T)
+    avlb = nb_available(f)
+    while((remaining > 0) && (avlb > 0))
+        ret = hdfs_read(f, pointer(a, length(a)-remaining+1), min(remaining, avlb))
         remaining -= ret
+        avlb -= ret
     end
+    (remaining > 0) && throw(EOFError())
     a
 end
 readbytes(f::HdfsFile, nb::Integer) = bytestring(read(f, Array(Uint8, nb)))
@@ -275,7 +278,7 @@ stat(fs::HdfsFS, path::String) = hdfs_get_path_info(fs, path)
 filesize(f::HdfsFile) = filesize(f.fs, f.path)
 filesize(fs::HdfsFS, path::String) = (stat(fs,path)).size
 
-seek(f::HdfsFile, n::Integer) = (0 == hdfs_seek(f, n))
+seek(f::HdfsFile, n::Integer) = ((n >= 0) ? (0 == hdfs_seek(f, n)) : error("invalid position"))
 seekend(f::HdfsFile) = seek(f, filesize(f))
 seekstart(f::HdfsFile) = seek(f, 0)
 skip(f::HdfsFile, n::Integer) = seek(f, n+position(f))

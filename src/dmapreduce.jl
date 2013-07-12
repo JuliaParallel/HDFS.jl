@@ -16,7 +16,7 @@ export  close, eof, read, write, readbytes, peek, readall, flush, nb_available, 
 using HDFS
 using URLParse
 using PTools
-using DataFrames
+#using DataFrames
 
 global _debug = false
 function _set_debug(d)
@@ -24,9 +24,19 @@ function _set_debug(d)
     _debug = d
 end
 
+function is_loaded(x::Symbol)
+    try
+        return (Module == typeof(eval(Main,x)))
+    catch
+        return false
+    end
+end
+
 abstract MapInputReader 
 abstract MapStreamInputReader <: MapInputReader
 abstract MRInput
+
+close(r::MapStreamInputReader) = try close(get_stream(r)) end
 
 typealias JobId     Int64
 typealias FuncNone  Union(Function,Nothing)
@@ -38,5 +48,8 @@ include("map_result_reader.jl")
 include("hdfs_jobs.jl")
 include("hdfs_mrutils.jl")
 
+if(is_loaded(:DataFrames))
+    include("hdfs_mrutils_dataframes.jl")
+end
 end
 

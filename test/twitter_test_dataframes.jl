@@ -2,10 +2,10 @@
 # sample test program to produce monthly aggregate count of smileys
 # used in tweets between year 2006 to 2009, based on data from infochimps.
 
-using HDFS
-using HDFS.MapReduce
 using DataFrames
 using Gaston
+using HDFS
+using HDFS.MapReduce
 
 ##
 # find smiley records from HDFS CSV file
@@ -54,5 +54,6 @@ function do_dataframe_test(furl::String, use_hdfs=true)
     else
         println(status(j, true))
     end
+    unload(j) # ensure file handles are closed cleanly
 end
 

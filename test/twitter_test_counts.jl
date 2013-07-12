@@ -29,9 +29,9 @@
 #   ticklabels_style        = {fontsize:1.0, textangle:90}
 # 
 
+using DataFrames
 using HDFS
 using HDFS.MapReduce
-using DataFrames
 
 ##
 # find smiley records from HDFS CSV file

@@ -71,7 +71,8 @@ end
 
 function _worker_task(t::WorkerTaskUnloadJob)
     d = ((myid() == 1) ? _def_wrkr_job_store : _job_store)
-    delete!(d, t.jid)
+    j = delete!(d, t.jid)
+    isa(j.info, HdfsJobRunInfo) && isa(j.info.rdr, MapStreamInputReader) && close(j.info.rdr)
     t.jid
 end
 
