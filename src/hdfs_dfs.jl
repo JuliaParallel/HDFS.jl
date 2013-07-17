@@ -1,5 +1,6 @@
 
 const hdfs_fsstore = Dict{(String, Integer, String), Vector{Any}}()
+typealias IPv4v6 Union(IPv4,IPv6)
 
 function finalize_hdfs_fs(fs::HdfsFS) 
     (C_NULL == fs.ptr) && return
@@ -157,22 +158,24 @@ end
 
 hdfs_is_directory(fs::HdfsFS, path::String) = (hdfs_get_path_info(fs,path).kind == HDFS_OBJ_DIR)
 
-function hdfs_blocks(fs::HdfsFS, path::String, start::Integer, length::Integer)
+hdfs_blocks(f::HdfsFile, start::Integer=1, length::Integer=0, as_ip::Bool=false) = hdfs_blocks(f.fs, f.path, start, (length > 0) ? length : filesize(f), as_ip)
+function hdfs_blocks(fs::HdfsFS, path::String, start::Integer, length::Integer, as_ip::Bool=false)
     c_ptr = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), int64(start), int64(length))
     (C_NULL == c_ptr) && error("Error getting hosts for file $(path)")
 
     i = 1
-    ret_vals = Array(Array{ASCIIString,1}, 0)
+    ret_vals = Array(as_ip ? Array{IPv4v6,1} : Array{ASCIIString,1}, 0)
     while true
         h_list = unsafe_load(c_ptr, i)
         (h_list == C_NULL) && break
         
         j = 1
-        arr = Array(ASCIIString, 0)
+        arr = Array(as_ip ? IPv4v6 : ASCIIString, 0)
         while true
             hname = unsafe_load(h_list, j)
             (hname == C_NULL) && break
-            push!(arr, bytestring(hname))
+            shname = bytestring(hname)
+            push!(arr, as_ip ? getaddrinfo(shname) : shname)
             #print(bytestring(hname), ", ")
             j += 1
         end
@@ -253,6 +256,7 @@ readbytes(f::HdfsFile, nb::Integer) = bytestring(read(f, Array(Uint8, nb)))
 readall(f::HdfsFile) = readbytes(f, nb_available(f))
 
 function peek(f::HdfsFile)
+    eof(f) && (return uint8(-1))
     ret = read(f, Uint8)
     skip(f, -1)
     ret
