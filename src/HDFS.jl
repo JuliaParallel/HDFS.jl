@@ -15,7 +15,7 @@ export  hdfs_connect,
         readall, flush, nb_available, position, stat, filesize, seek, seekend, seekstart, skip,
         # from hdfs_types.jl
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
-        HdfsFS, HdfsFile, HdfsFileInfo
+        HdfsFS, HdfsFile, HdfsFileInfo, HdfsURL
 
 using URLParse
 

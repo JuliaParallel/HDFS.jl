@@ -32,6 +32,8 @@ immutable BlockIO <: IO
     end
 end
 
+BlockIO(bio::BlockIO, match_ends::Union(Char,Nothing)=nothing) = BlockIO(bio.s, bio.r, match_ends)
+
 close(bio::BlockIO) = close(bio.s)
 eof(bio::BlockIO) = (position(bio) >= bio.l) 
 read(bio::BlockIO, x::Type{Uint8}) = read(bio.s, x)

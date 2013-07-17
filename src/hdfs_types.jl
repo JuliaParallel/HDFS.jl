@@ -36,6 +36,15 @@ type HdfsFile <: IO
     end
 end
 
+type HdfsURL
+    url::String
+    function HdfsURL(url::String)
+        comps = urlparse(url)
+        (comps.scheme != "hdfs") && error("not a HDFS URL")
+        new(url)
+    end
+end
+
 immutable c_hdfsfileinfo
     mKind::Cint             # file or directory. hoping the enum is int type (it is actually compiler dependent)
     mName::Ptr{Uint8}       # file name

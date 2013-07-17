@@ -37,6 +37,14 @@ function hdfs_connect(host::String="default", port::Integer=0, user::String="")
     HdfsFS(host, port, "", ptr)
 end
 
+function hdfs_connect(url::HdfsURL)
+    comps = urlparse(url.url)
+    uname = username(comps)
+    hname = hostname(comps)
+    portnum = port(comps)
+    hdfs_connect(hname, portnum, (nothing == uname)?"":uname)
+end
+
 
 # file control flags need to be done manually
 function hdfs_open(fs::HdfsFS, path::String, mode::String, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
@@ -63,6 +71,7 @@ function hdfs_open(url::String, mode::String, buffer_sz::Integer=0, replication:
     url, frag = urldefrag(url)
     # new source
     comps = urlparse(url)
+    (comps.scheme != "hdfs") && error("not a HDFS URL")
     uname = username(comps)
     hname = hostname(comps)
     portnum = port(comps)
@@ -71,10 +80,11 @@ function hdfs_open(url::String, mode::String, buffer_sz::Integer=0, replication:
     fs = hdfs_connect(hname, portnum, (nothing == uname)?"":uname)
     hdfs_open(fs, fname, mode, buffer_sz, replication, bsz)
 end
+hdfs_open(url::HdfsURL, mode::String, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(url.url, mode, buffer_sz, replication, bsz)
 
 
 function hdfs_close(file::HdfsFile) 
-    ret = ccall((:hdfsCloseFile, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
+    ret = (file.fs.ptr == C_NULL) ? 0 : ccall((:hdfsCloseFile, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
     (0 == ret) && (file.ptr = C_NULL)
     ret
 end
@@ -158,9 +168,9 @@ end
 
 hdfs_is_directory(fs::HdfsFS, path::String) = (hdfs_get_path_info(fs,path).kind == HDFS_OBJ_DIR)
 
-hdfs_blocks(f::HdfsFile, start::Integer=1, length::Integer=0, as_ip::Bool=false) = hdfs_blocks(f.fs, f.path, start, (length > 0) ? length : filesize(f), as_ip)
-function hdfs_blocks(fs::HdfsFS, path::String, start::Integer, length::Integer, as_ip::Bool=false)
-    c_ptr = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), int64(start), int64(length))
+function hdfs_blocks(fs::HdfsFS, path::String, start::Integer=1, len::Integer=0, as_ip::Bool=false)
+    (len == 0) && (len = hdfs_get_path_info(fs, path).size)
+    c_ptr = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), int64(start), int64(len))
     (C_NULL == c_ptr) && error("Error getting hosts for file $(path)")
 
     i = 1
@@ -187,6 +197,8 @@ function hdfs_blocks(fs::HdfsFS, path::String, start::Integer, length::Integer, 
     ccall((:hdfsFreeHosts, _libhdfs), Void, (Ptr{Ptr{Ptr{Uint8}}},), c_ptr)
     ret_vals
 end
+hdfs_blocks(f::HdfsFile, start::Integer=1, len::Integer=0, as_ip::Bool=false) = hdfs_blocks(f.fs, f.path, start, len, as_ip)
+hdfs_blocks(url::HdfsURL, start::Integer=1, len::Integer=0, as_ip::Bool=false) = hdfs_blocks(hdfs_connect(url), urlparse(url.url).url, start, len, as_ip)
 
 
 hdfs_get_default_block_size(fs::HdfsFS) = ccall((:hdfsGetDefaultBlockSize, _libhdfs), Int64, (Ptr{Void},), fs.ptr)
@@ -236,6 +248,7 @@ isdir(fs::HdfsFS, path::String) = hdfs_is_directory(fs, path)
 # this is crap. should implement the array interface also
 open(fs::HdfsFS, path::String, mode::String="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(fs, path, mode, buffer_sz, replication, bsz)
 open(f::HdfsFile, mode::String="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(f, mode, buffer_sz, replication, bsz)
+open(url::HdfsURL, mode::String="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(url.url, mode, buffer_sz, replication, bsz)
 close(f::HdfsFile) = hdfs_close(f)
 eof(f::HdfsFile) = (position(f) == filesize(f))
 
@@ -276,11 +289,13 @@ function position(f::HdfsFile)
     (p >= 0) ? p : error("error getting current position")
 end
 
-stat(f::HdfsFile) = stat(f.fs, f.path)
 stat(fs::HdfsFS, path::String) = hdfs_get_path_info(fs, path)
+stat(f::HdfsFile) = stat(f.fs, f.path)
+stat(url::HdfsURL) = stat(hdfs_connect(url), urlparse(url.url).url)
 
-filesize(f::HdfsFile) = filesize(f.fs, f.path)
 filesize(fs::HdfsFS, path::String) = (stat(fs,path)).size
+filesize(f::HdfsFile) = filesize(f.fs, f.path)
+filesize(url::HdfsURL) = filesize(hdfs_connect(url), urlparse(url.url).url)
 
 seek(f::HdfsFile, n::Integer) = ((n >= 0) ? (0 == hdfs_seek(f, n)) : error("invalid position"))
 seekend(f::HdfsFile) = seek(f, filesize(f))
