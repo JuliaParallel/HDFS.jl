@@ -15,11 +15,16 @@ immutable BlockIO <: IO
     function find_start_pos(bio::BlockIO, end_byte::Char)
         (bio.r.start == 1) && (return bio.r.start)
         seekstart(bio)
-        while(end_byte != read(bio, Uint8)) continue end
+        !eof(bio.s) && while(end_byte != read(bio, Uint8)) continue end
         position(bio.s)+1
     end
 
     function BlockIO(s::IO, r::Range1, match_ends::Union(Char,Nothing)=nothing)
+        # TODO: use mark when available
+        seekend(s)
+        ep = position(s)
+
+        r = min(r.start,ep+1):min(r.start+r.len-1,ep)
         bio = new(s, r, length(r))
         if(nothing != match_ends)
             p1 = find_start_pos(bio, match_ends)
