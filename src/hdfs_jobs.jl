@@ -1,4 +1,3 @@
-
 ##
 # Assign Job Ids. A one up number
 global __next_job_id = int64(0)::JobId
@@ -71,7 +70,9 @@ end
 
 function _worker_task(t::WorkerTaskUnloadJob)
     d = ((myid() == 1) ? _def_wrkr_job_store : _job_store)
-    j = delete!(d, t.jid)
+    # After v0.2: j = pop!(d, t.jid)
+    j = d[t.jid]
+    delete!(d, t.jid)
     isa(j.info, HdfsJobRunInfo) && isa(j.info.rdr, MapStreamInputReader) && close(j.info.rdr)
     t.jid
 end
