@@ -7,7 +7,6 @@ using Gaston
 using HDFS
 using HDFS.MapReduce
 using Blocks
-using Blocks.DDataFrames
 
 import HDFS.MapReduce.find_rec
 

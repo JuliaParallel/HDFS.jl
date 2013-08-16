@@ -1,7 +1,6 @@
 using DataFrames
 using HDFS
 using Blocks
-using Blocks.DDataFrames
 
 function find_nrows(datafile)
     b = Block(datafile)
