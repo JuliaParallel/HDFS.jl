@@ -72,7 +72,7 @@ function expand_file_inputs(inp::MRFsFileInput)
 
     for fspec in inp.source_spec
         if(ismatch(rwild, fspec))                                                           # a directory with wild card specification
-            dirname,pattern = contains(fspec, '/') ? rsplit(fspec, "/", 2) : ("", fspec)    # separate the directory path and wild card specification
+            dirname,pattern = ('/' in fspec) ? rsplit(fspec, "/", 2) : ("", fspec)    # separate the directory path and wild card specification
             (isempty(pattern) || ismatch(rwild,dirname)) && error(string("wild card must be part of file name. invalid url: ", fspec))
             isempty(dirname) && (dirname = ".")
             add_dir(dirname, Regex(pattern))

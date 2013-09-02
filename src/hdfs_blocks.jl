@@ -13,7 +13,7 @@ function Block(f::HdfsURL)
     block_dist = hdfs_blocks(f, 1, 0, true)
     for iplist in block_dist
         # add loopback interface for localip
-        contains(iplist, localip) && !contains(iplist, loopbackip) && push!(iplist, loopbackip)
+        (localip in iplist) && !(loopbackip in iplist) && push!(iplist, loopbackip)
     end
     block_wrkr_ids = map(ips->worker_ids[findin(worker_ips, ips)], block_dist)
     filestat = stat(f)
