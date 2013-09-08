@@ -213,6 +213,9 @@ hdfs_chmod(fs::HdfsFS, path::String, mode::Int16) = ccall((:hdfsChmod, _libhdfs)
 
 hdfs_utime(fs::HdfsFS, path::String, mtime::Integer, atime::Integer) = ccall((:hdfsUtime, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, TimeT, TimeT), fs.ptr, path, convert(TimeT, mtime), convert(TimeT, atime))
 
+isequal(u1::HdfsURL, u2::HdfsURL) = isequal(u1.url, u2.url)
+hash(u::HdfsURL) = hash(u.url)
+
 
 ##
 # File system implementation for HdfsFS
@@ -242,6 +245,10 @@ function readdir(fs::HdfsFS, path::String)
 end
 
 isdir(fs::HdfsFS, path::String) = hdfs_is_directory(fs, path)
+function isdir(f::HdfsURL)
+    comps = urlparse(f.url)
+    isdir(hdfs_connect(f), comps.url)
+end
 
 ##
 # IO implementation for HdfsFile
