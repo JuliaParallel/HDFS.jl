@@ -17,17 +17,16 @@ end
 
 function file_affinities(fs::HdfsFS, path::String, recurse::Bool, macprio::Base.Collections.PriorityQueue, list::Dict)
     localip = getipaddr()
-    loopbackip = IPv4(127,0,0,1)
 
     file_infos = hdfs_list_directory(fs, path)
     for file_info in file_infos
         file_path = urlparse(file_info.name).url
         if file_info.kind == HDFS_OBJ_FILE
             # fetch blocks of the file and determine best possible hosts
-            block_dist = addloopback(hdfs_blocks(fs, file_path))
+            block_dist = addloopback(hdfs_blocks(fs, file_path, 1, 0, true))
             macs  = unique([block_dist...])
             for (m,p) in macprio
-                if string(m) in macs
+                if m in macs
                     macprio[m] += 1
                     push!(list[m], file_info)
                     break
@@ -50,7 +49,12 @@ function Block(f::HdfsURL, recurse::Bool=true, maxfiles::Int=0)
     list = Dict()
     worker_ids = workers()
     localip = getipaddr()
-    worker_ips = map(x->getaddrinfo(string(isa(x, LocalProcess)?localip:x.host)), map(x->Base.worker_from_id(x), worker_ids))
+    function ip_from_id(x)
+        w = Base.worker_from_id(x)
+        h = isa(w, LocalProcess) ? string(localip) : string(w.host)
+        getaddrinfo(h)
+    end
+    worker_ips = map(ip_from_id, worker_ids)
     for wip in worker_ips
         macprio[wip] = 0
         list[wip] = {}
