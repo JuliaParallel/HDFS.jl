@@ -1,6 +1,8 @@
 ## The HDFS Map Reduce Interface
 
-Available as module `HDFS.MapReduce`, this map-reduce framework is intended for scenarios where the working dataset would fit into distributed memory (irrespective of the input dataset which can still be arbitarily large). Solving problems where the working dataset would be larger than available memory is still possible, but would require one to implement the sorting and shuffling logic between the map and reduce steps. Using Hadoop map-reduce is a better option in such cases, till such support is available in Julia.
+Available as module `HDFS.MapReduce`, this map-reduce framework is intended for scenarios where the working dataset would fit into distributed memory (irrespective of the input dataset which can still be arbitarily large), and the problem requires multiple iterative map and reduce operations. It optimizes by keeping results of previous phases in memory and accessible to subsequent phases. Results can be stored are retrieved back in a distributed manner, allowing restartability.
+
+Solving problems where the working dataset would be larger than available memory is still possible, but would require one to implement the sorting and shuffling logic between the map and reduce steps. Using Hadoop map-reduce is a better option in such cases, till such support is available in Julia.
 
 
 **dmap**( *data_source* , *map_fn* , *collect_fn* ) &rarr; *jobid*

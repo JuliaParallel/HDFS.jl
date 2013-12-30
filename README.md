@@ -6,3 +6,5 @@ HDFS.jl provides a wrapper over libhdfs and a julia map-reduce functionality bui
 - [HDFS Map Reduce Interface](MAPREDUCE.md) : Map - Reduce APIs
 - [HDFS Blocks Interface](BLOCKS.md) : HDFS Blocks APIs
 
+- [Installation](INSTALL.md) : Installation instructions and FAQ
+
