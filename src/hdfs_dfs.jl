@@ -1,5 +1,5 @@
 
-const hdfs_fsstore = Dict{(String, Integer, String), Vector{Any}}()
+const hdfs_fsstore = Dict{(AbstractString, Integer, AbstractString), Vector{Any}}()
 typealias IPv4v6 Union(IPv4,IPv6)
 
 function finalize_hdfs_fs(fs::HdfsFS) 
@@ -14,7 +14,7 @@ end
 
 # hdfs_connect returns pointers to the same handle across multiple calls for the same file system
 # so we must have an abstraction with reference count
-function _get_ptr_ref(host::String, port::Integer, user::String="", incr::Bool=true)
+function _get_ptr_ref(host::AbstractString, port::Integer, user::AbstractString="", incr::Bool=true)
     key = (host, port, user)
     if(haskey(hdfs_fsstore, key))
         arr = hdfs_fsstore[key]
@@ -26,7 +26,7 @@ function _get_ptr_ref(host::String, port::Integer, user::String="", incr::Bool=t
     key, [0, C_NULL]
 end
 
-function hdfs_connect(host::String="default", port::Integer=0, user::String="") 
+function hdfs_connect(host::AbstractString="default", port::Integer=0, user::AbstractString="") 
     key, arr = _get_ptr_ref(host, port, user)
     (0 != arr[1]) && return HdfsFS(host, port, user, arr[2])
     ptr = (user == "") ? 
@@ -38,16 +38,16 @@ function hdfs_connect(host::String="default", port::Integer=0, user::String="")
 end
 
 function hdfs_connect(url::HdfsURL)
-    comps = urlparse(url.url)
-    uname = username(comps)
-    hname = hostname(comps)
-    portnum = port(comps)
+    uri = URI(url.url)
+    uname,_passwd = userinfo(uri.userinfo)
+    hname = uri.host
+    portnum = uri.port
     hdfs_connect(hname, portnum, (nothing == uname)?"":uname)
 end
 
 
 # file control flags need to be done manually
-function hdfs_open(fs::HdfsFS, path::String, mode::String, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
+function hdfs_open(fs::HdfsFS, path::AbstractString, mode::AbstractString, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
     flags = -1
     (mode == "r") && (flags = Base.JL_O_RDONLY)
     (mode == "w") && (flags = Base.JL_O_WRONLY)
@@ -59,7 +59,7 @@ function hdfs_open(fs::HdfsFS, path::String, mode::String, buffer_sz::Integer=0,
     return HdfsFile(fs, path, file)
 end
 
-function hdfs_open(f::HdfsFile, mode::String, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
+function hdfs_open(f::HdfsFile, mode::AbstractString, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
     (C_NULL != f.ptr) && (0 != hdfs_close(f)) && error("error closing file")
     fnew = hdfs_open(f.fs, f.path, mode, buffer_sz, replication, bsz)
     f.ptr = fnew.ptr
@@ -67,20 +67,18 @@ function hdfs_open(f::HdfsFile, mode::String, buffer_sz::Integer=0, replication:
     f
 end
 
-function hdfs_open(url::String, mode::String, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
-    url, frag = urldefrag(url)
-    # new source
-    comps = urlparse(url)
-    (comps.scheme != "hdfs") && error("not a HDFS URL")
-    uname = username(comps)
-    hname = hostname(comps)
-    portnum = port(comps)
-    fname = comps.url
+function hdfs_open(url::AbstractString, mode::AbstractString, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0)
+    uri = defrag(URI(url))
+    (uri.schema != "hdfs") && error("not a HDFS URL")
+    uname,_passwd = userinfo(uri.userinfo)
+    hname = uri.host
+    portnum = uri.port
+    fname = uri.path
 
     fs = hdfs_connect(hname, portnum, (nothing == uname)?"":uname)
     hdfs_open(fs, fname, mode, buffer_sz, replication, bsz)
 end
-hdfs_open(url::HdfsURL, mode::String, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(url.url, mode, buffer_sz, replication, bsz)
+hdfs_open(url::HdfsURL, mode::AbstractString, buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(url.url, mode, buffer_sz, replication, bsz)
 
 
 function hdfs_close(file::HdfsFile) 
@@ -89,7 +87,7 @@ function hdfs_close(file::HdfsFile)
     ret
 end
 
-function hdfs_exists(fs::HdfsFS, path::String) 
+function hdfs_exists(fs::HdfsFS, path::AbstractString) 
     ret = ccall((:hdfsExists, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
     # TODO: examine why hdfsExists returns -1 when file does not exist. as per docs it should return 1
     #(ret < 0) && println("error checking file $(path) exists. error: $(ret)")
@@ -123,13 +121,13 @@ hdfs_flush(file::HdfsFile) = ccall((:hdfsFlush, _libhdfs), Int32, (Ptr{Void}, Pt
 
 hdfs_available(file::HdfsFile) = ccall((:hdfsAvailable, _libhdfs), Int32, (Ptr{Void},Ptr{Void}), file.fs.ptr, file.ptr)
 
-hdfs_copy(srcFS::HdfsFS, src::String, dstFS::HdfsFS, dst::String) = ccall((:hdfsCopy, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Void}, Ptr{Uint8}), srcFS.ptr, bytestring(src), dstFS.ptr, bytestring(dst))
+hdfs_copy(srcFS::HdfsFS, src::AbstractString, dstFS::HdfsFS, dst::AbstractString) = ccall((:hdfsCopy, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Void}, Ptr{Uint8}), srcFS.ptr, bytestring(src), dstFS.ptr, bytestring(dst))
 
-hdfs_move(srcFS::HdfsFS, src::String, dstFS::HdfsFS, dst::String) = ccall((:hdfsMove, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Void}, Ptr{Uint8}), srcFS.ptr, bytestring(src), dstFS.ptr, bytestring(dst))
+hdfs_move(srcFS::HdfsFS, src::AbstractString, dstFS::HdfsFS, dst::AbstractString) = ccall((:hdfsMove, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Void}, Ptr{Uint8}), srcFS.ptr, bytestring(src), dstFS.ptr, bytestring(dst))
 
-hdfs_delete(fs::HdfsFS, path::String) = ccall((:hdfsDelete, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
+hdfs_delete(fs::HdfsFS, path::AbstractString) = ccall((:hdfsDelete, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
 
-hdfs_rename(fs::HdfsFS, old_path::String, new_path::String) = ccall((:hdfsRename, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Uint8}), fs.ptr, bytestring(old_path), bytestring(new_path))
+hdfs_rename(fs::HdfsFS, old_path::AbstractString, new_path::AbstractString) = ccall((:hdfsRename, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Uint8}), fs.ptr, bytestring(old_path), bytestring(new_path))
 
 function hdfs_pwd(fs::HdfsFS, buff::Vector{Uint8}) 
     ptr = ccall((:hdfsGetWorkingDirectory, _libhdfs), Ptr{Uint8}, (Ptr{Void}, Ptr{Uint8}, Int32), fs.ptr, buff, int32(length(buff)))
@@ -140,13 +138,13 @@ end
 hdfs_pwd(fs::HdfsFS, buff_sz::Integer) = hdfs_pwd(fs, Array(Uint8, buff_sz))
 hdfs_pwd(fs::HdfsFS) = hdfs_pwd(fs, 1024)
 
-hdfs_cd(fs::HdfsFS, path::String) = ccall((:hdfsSetWorkingDirectory, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
+hdfs_cd(fs::HdfsFS, path::AbstractString) = ccall((:hdfsSetWorkingDirectory, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
 
-hdfs_mkdir(fs::HdfsFS, path::String) = ccall((:hdfsCreateDirectory, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
+hdfs_mkdir(fs::HdfsFS, path::AbstractString) = ccall((:hdfsCreateDirectory, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
 
-hdfs_set_replication(fs::HdfsFS, path::String, replication::Integer)=ccall((:hdfsSetReplication, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Int16), fs.ptr, bytestring(path), int16(replication))
+hdfs_set_replication(fs::HdfsFS, path::AbstractString, replication::Integer)=ccall((:hdfsSetReplication, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Int16), fs.ptr, bytestring(path), int16(replication))
 
-function hdfs_list_directory(fs::HdfsFS, path::String)
+function hdfs_list_directory(fs::HdfsFS, path::AbstractString)
     num_entries = Int32[-1]
     info_ptr = ccall((:hdfsListDirectory, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}, Ptr{Int32}), fs.ptr, bytestring(path), num_entries)
     (0 == num_entries[1]) && (return [])
@@ -157,7 +155,7 @@ function hdfs_list_directory(fs::HdfsFS, path::String)
     ret
 end
 
-function hdfs_get_path_info(fs::HdfsFS, path::String)
+function hdfs_get_path_info(fs::HdfsFS, path::AbstractString)
     info_ptr = ccall((:hdfsGetPathInfo, _libhdfs), Ptr{c_hdfsfileinfo}, (Ptr{Void}, Ptr{Uint8}), fs.ptr, bytestring(path))
     (C_NULL == info_ptr) && error(string("Error getting path ", path))
 
@@ -166,9 +164,9 @@ function hdfs_get_path_info(fs::HdfsFS, path::String)
     ret
 end
 
-hdfs_is_directory(fs::HdfsFS, path::String) = (hdfs_get_path_info(fs,path).kind == HDFS_OBJ_DIR)
+hdfs_is_directory(fs::HdfsFS, path::AbstractString) = (hdfs_get_path_info(fs,path).kind == HDFS_OBJ_DIR)
 
-function hdfs_blocks(fs::HdfsFS, path::String, start::Integer=1, len::Integer=0, as_ip::Bool=false)
+function hdfs_blocks(fs::HdfsFS, path::AbstractString, start::Integer=1, len::Integer=0, as_ip::Bool=false)
     (len == 0) && (len = hdfs_get_path_info(fs, path).size)
     c_ptr = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), int64(start), int64(len))
     (C_NULL == c_ptr) && error("Error getting hosts for file $(path)")
@@ -198,7 +196,7 @@ function hdfs_blocks(fs::HdfsFS, path::String, start::Integer=1, len::Integer=0,
     ret_vals
 end
 hdfs_blocks(f::HdfsFile, start::Integer=1, len::Integer=0, as_ip::Bool=false) = hdfs_blocks(f.fs, f.path, start, len, as_ip)
-hdfs_blocks(url::HdfsURL, start::Integer=1, len::Integer=0, as_ip::Bool=false) = hdfs_blocks(hdfs_connect(url), urlparse(url.url).url, start, len, as_ip)
+hdfs_blocks(url::HdfsURL, start::Integer=1, len::Integer=0, as_ip::Bool=false) = hdfs_blocks(hdfs_connect(url), URI(url.url).path, start, len, as_ip)
 
 
 hdfs_get_default_block_size(fs::HdfsFS) = ccall((:hdfsGetDefaultBlockSize, _libhdfs), Int64, (Ptr{Void},), fs.ptr)
@@ -207,11 +205,11 @@ hdfs_get_capacity(fs::HdfsFS) = ccall((:hdfsGetCapacity, _libhdfs), Int64, (Ptr{
 
 hdfs_get_used(fs::HdfsFS) = ccall((:hdfsGetUsed, _libhdfs), Int64, (Ptr{Void},), fs.ptr)
 
-hdfs_chown(fs::HdfsFS, path::String, owner::String, group::String) = ccall((:hdfsChown, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Uint8}, Ptr{Uint8}), fs.ptr, bytestring(path), bytestring(owner), bytestring(group))
+hdfs_chown(fs::HdfsFS, path::AbstractString, owner::AbstractString, group::AbstractString) = ccall((:hdfsChown, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Uint8}, Ptr{Uint8}), fs.ptr, bytestring(path), bytestring(owner), bytestring(group))
 
-hdfs_chmod(fs::HdfsFS, path::String, mode::Int16) = ccall((:hdfsChmod, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Int16), fs.ptr, bytestring(path), mode)
+hdfs_chmod(fs::HdfsFS, path::AbstractString, mode::Int16) = ccall((:hdfsChmod, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Int16), fs.ptr, bytestring(path), mode)
 
-hdfs_utime(fs::HdfsFS, path::String, mtime::Integer, atime::Integer) = ccall((:hdfsUtime, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, TimeT, TimeT), fs.ptr, path, convert(TimeT, mtime), convert(TimeT, atime))
+hdfs_utime(fs::HdfsFS, path::AbstractString, mtime::Integer, atime::Integer) = ccall((:hdfsUtime, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, TimeT, TimeT), fs.ptr, path, convert(TimeT, mtime), convert(TimeT, atime))
 
 isequal(u1::HdfsURL, u2::HdfsURL) = isequal(u1.url, u2.url)
 hash(u::HdfsURL) = hash(u.url)
@@ -219,23 +217,23 @@ hash(u::HdfsURL) = hash(u.url)
 
 ##
 # File system implementation for HdfsFS
-pwd(fs::HdfsFS) = urlparse(hdfs_pwd(fs)).url
-function cd(fs::HdfsFS, path::String)
+pwd(fs::HdfsFS) = URI(hdfs_pwd(fs)).path
+function cd(fs::HdfsFS, path::AbstractString)
     hdfs_exists(fs, path) && (0 == hdfs_cd(fs, path)) && (return nothing)
     error("no such file or directory $path")
 end
-mkdir(fs::HdfsFS, path::String) = (0 == hdfs_mkdir(fs, path)) ? nothing : error("error creating directory $path")
-mv(srcFS::HdfsFS, src::String, dstFS::HdfsFS, dst::String) = (srcFS == dstFS) ? mv(srcFS, src, dst) : (0 == hdfs_move(srcFS, src, dstFS, dst)) ? nothing : error("error moving file")
-mv(fs::HdfsFS, src::String, dst::String) = (0 == hdfs_rename(fs, src, dst)) ? nothing : error("error renaming file")
-rm(fs::HdfsFS, path::String) = (0 == hdfs_delete(fs, path)) ? nothing : error("error deleting $path")
-cp(srcFS::HdfsFS, src::String, dstFS::HdfsFS, dst::String) = (0 == hdfs_copy(srcFS, src, dstFS, dst)) ? nothing : error("error copying file")
-cp(fs::HdfsFS, src::String, dst::String) = cp(fs, src, fs, dst)
-rmdir(fs::HdfsFS, path::String) = rm(fs, path)
+mkdir(fs::HdfsFS, path::AbstractString) = (0 == hdfs_mkdir(fs, path)) ? nothing : error("error creating directory $path")
+mv(srcFS::HdfsFS, src::AbstractString, dstFS::HdfsFS, dst::AbstractString) = (srcFS == dstFS) ? mv(srcFS, src, dst) : (0 == hdfs_move(srcFS, src, dstFS, dst)) ? nothing : error("error moving file")
+mv(fs::HdfsFS, src::AbstractString, dst::AbstractString) = (0 == hdfs_rename(fs, src, dst)) ? nothing : error("error renaming file")
+rm(fs::HdfsFS, path::AbstractString) = (0 == hdfs_delete(fs, path)) ? nothing : error("error deleting $path")
+cp(srcFS::HdfsFS, src::AbstractString, dstFS::HdfsFS, dst::AbstractString) = (0 == hdfs_copy(srcFS, src, dstFS, dst)) ? nothing : error("error copying file")
+cp(fs::HdfsFS, src::AbstractString, dst::AbstractString) = cp(fs, src, fs, dst)
+rmdir(fs::HdfsFS, path::AbstractString) = rm(fs, path)
 function readdir(fs::HdfsFS) 
     offset = length(pwd(fs))+2
-    String[urlparse(fi.name).url[offset:] for fi in hdfs_list_directory(fs, ".")]
+    AbstractString[URI(fi.name).path[offset:end] for fi in hdfs_list_directory(fs, ".")]
 end
-function readdir(fs::HdfsFS, path::String)
+function readdir(fs::HdfsFS, path::AbstractString)
     (path == ".") && (return readdir(fs))
     p = pwd(fs)
     cd(fs, path)
@@ -244,18 +242,18 @@ function readdir(fs::HdfsFS, path::String)
     ret
 end
 
-isdir(fs::HdfsFS, path::String) = hdfs_is_directory(fs, path)
+isdir(fs::HdfsFS, path::AbstractString) = hdfs_is_directory(fs, path)
 function isdir(f::HdfsURL)
-    comps = urlparse(f.url)
-    isdir(hdfs_connect(f), comps.url)
+    uri = URI(f.url)
+    isdir(hdfs_connect(f), uri.path)
 end
 
 ##
 # IO implementation for HdfsFile
 # this is crap. should implement the array interface also
-open(fs::HdfsFS, path::String, mode::String="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(fs, path, mode, buffer_sz, replication, bsz)
-open(f::HdfsFile, mode::String="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(f, mode, buffer_sz, replication, bsz)
-open(url::HdfsURL, mode::String="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(url.url, mode, buffer_sz, replication, bsz)
+open(fs::HdfsFS, path::AbstractString, mode::AbstractString="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(fs, path, mode, buffer_sz, replication, bsz)
+open(f::HdfsFile, mode::AbstractString="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(f, mode, buffer_sz, replication, bsz)
+open(url::HdfsURL, mode::AbstractString="r", buffer_sz::Integer=0, replication::Integer=0, bsz::Integer=0) = hdfs_open(url.url, mode, buffer_sz, replication, bsz)
 close(f::HdfsFile) = hdfs_close(f)
 eof(f::HdfsFile) = (position(f) == filesize(f))
 
@@ -296,13 +294,13 @@ function position(f::HdfsFile)
     (p >= 0) ? p : error("error getting current position")
 end
 
-stat(fs::HdfsFS, path::String) = hdfs_get_path_info(fs, path)
+stat(fs::HdfsFS, path::AbstractString) = hdfs_get_path_info(fs, path)
 stat(f::HdfsFile) = stat(f.fs, f.path)
-stat(url::HdfsURL) = stat(hdfs_connect(url), urlparse(url.url).url)
+stat(url::HdfsURL) = stat(hdfs_connect(url), URI(url.url).path)
 
-filesize(fs::HdfsFS, path::String) = (stat(fs,path)).size
+filesize(fs::HdfsFS, path::AbstractString) = (stat(fs,path)).size
 filesize(f::HdfsFile) = filesize(f.fs, f.path)
-filesize(url::HdfsURL) = filesize(hdfs_connect(url), urlparse(url.url).url)
+filesize(url::HdfsURL) = filesize(hdfs_connect(url), URI(url.url).path)
 
 seek(f::HdfsFile, n::Integer) = ((n >= 0) ? (0 == hdfs_seek(f, n)) : error("invalid position"))
 seekend(f::HdfsFile) = seek(f, filesize(f))

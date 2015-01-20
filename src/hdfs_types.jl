@@ -1,4 +1,3 @@
-const _libhdfs = "libhdfs"
 
 const HDFS_OBJ_FILE = 'F'
 const HDFS_OBJ_DIR = 'D'
@@ -14,11 +13,11 @@ end
 
 ## used to enforce types ##
 type HdfsFS
-    host::String
+    host::AbstractString
     port::Int
-    user::String
+    user::AbstractString
     ptr::Ptr{Void}
-    function HdfsFS(host::String, port::Int, user::String, pt::Ptr{Void})
+    function HdfsFS(host::AbstractString, port::Int, user::AbstractString, pt::Ptr{Void})
         fs = new(host, port, user, pt)
         (pt != C_NULL) && finalizer(fs, finalize_hdfs_fs)
         fs
@@ -27,9 +26,9 @@ end
 
 type HdfsFile <: IO
     fs::HdfsFS
-    path::String
+    path::AbstractString
     ptr::Ptr{Void}
-    function HdfsFile(fs::HdfsFS, path::String, pt::Ptr{Void})
+    function HdfsFile(fs::HdfsFS, path::AbstractString, pt::Ptr{Void})
         f = new(fs, path, pt)
         (pt != C_NULL) && finalizer(f, hdfs_close)
         f
@@ -37,10 +36,10 @@ type HdfsFile <: IO
 end
 
 type HdfsURL
-    url::String
-    function HdfsURL(url::String)
-        comps = urlparse(url)
-        (comps.scheme != "hdfs") && error("not a HDFS URL")
+    url::AbstractString
+    function HdfsURL(url::AbstractString)
+        uri = URI(url)
+        (uri.schema != "hdfs") && error("not a HDFS URL")
         new(url)
     end
 end
@@ -60,13 +59,13 @@ end
 
 type HdfsFileInfo
     kind::Int8
-    name::String
+    name::AbstractString
     last_mod::Int64
     size::Int64
     replications::Int16
     block_sz::Int64
-    owner::String
-    grp::String
+    owner::AbstractString
+    grp::AbstractString
     permissions::Int16
     last_access::Int64
 
