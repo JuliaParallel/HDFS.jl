@@ -1,15 +1,13 @@
 module HDFS
 
-using URLParse
-using Blocks
+using Compat
+using URIParser
 
 import  Base.pwd, Base.readdir, Base.isdir, Base.cd, Base.mkdir, Base.mv, Base.cp, Base.rm, Base.rmdir, 
         Base.open, Base.close, Base.eof, Base.read, Base.write, Base.readbytes, Base.peek,
         Base.readall, Base.flush, Base.nb_available, Base.position, Base.stat, Base.filesize, 
         Base.seek, Base.seekend, Base.seekstart, Base.skip,
         Base.isequal, Base.hash
-
-import  Blocks.Block
 
 export  hdfs_connect,
         hdfs_exists, hdfs_delete, 
@@ -24,9 +22,7 @@ export  hdfs_connect,
         readall, flush, nb_available, position, stat, filesize, seek, seekend, seekstart, skip,
         # from hdfs_types.jl
         HDFS_OBJ_FILE, HDFS_OBJ_DIR, HDFS_OBJ_INVALID,
-        HdfsFS, HdfsFile, HdfsFileInfo, HdfsURL,
-        # from hdfs_blocks.jl
-        Block
+        HdfsFS, HdfsFile, HdfsFileInfo, HdfsURL
 
 global _debug = false
 function _set_debug(d)
@@ -34,12 +30,10 @@ function _set_debug(d)
     _debug = d
 end
 
+const _libhdfs = "libhdfs"
+dlopen(_libhdfs)
+
 include("hdfs_types.jl")
-if(C_NULL != dlopen_e(_libhdfs))
-    include("hdfs_dfs.jl")
-end
-include("dmapreduce.jl")
-include("hdfs_blocks.jl")
+include("hdfs_dfs.jl")
 
 end
-
