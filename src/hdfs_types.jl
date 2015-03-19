@@ -71,7 +71,10 @@ type HdfsFileInfo
 
     HdfsFileInfo(pt::Ptr{c_hdfsfileinfo}) = (C_NULL != pt) ? HdfsFileInfo(unsafe_load(pt)) : new(HDFS_OBJ_INVALID, "", 0, 0, 0, 0, "", "", 0, 0)
     HdfsFileInfo(cfi::c_hdfsfileinfo) = 
-        new(cfi.mKind, bytestring(cfi.mName), int64(cfi.mLastMod), cfi.mSize, cfi.mReplication, cfi.mBlockSize,
-                        bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, int64(cfi.mLastAccess))
+        new(cfi.mKind, bytestring(cfi.mName), 
+                        convert(Int64,cfi.mLastMod), 
+                        cfi.mSize, cfi.mReplication, cfi.mBlockSize,
+                        bytestring(cfi.mOwner), bytestring(cfi.mGroup), cfi.mPermissions, 
+                        convert(Int64,cfi.mLastAccess))
 end
 

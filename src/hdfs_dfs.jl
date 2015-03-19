@@ -29,9 +29,10 @@ end
 function hdfs_connect(host::AbstractString="default", port::Integer=0, user::AbstractString="") 
     key, arr = _get_ptr_ref(host, port, user)
     (0 != arr[1]) && return HdfsFS(host, port, user, arr[2])
+    porti32 = @compat Int32(port)
     ptr = (user == "") ? 
-            ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32), bytestring(host), int32(port)) : 
-            ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32, Ptr{Uint8}), bytestring(host), int32(port), bytestring(user))
+            ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32), bytestring(host), porti32) : 
+            ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{Uint8}, Int32, Ptr{Uint8}), bytestring(host), porti32, bytestring(user))
     (C_NULL == ptr) && error("hdfs connect failed")
     hdfs_fsstore[key] = [1, ptr]
     HdfsFS(host, port, "", ptr)
@@ -54,7 +55,11 @@ function hdfs_open(fs::HdfsFS, path::AbstractString, mode::AbstractString, buffe
     (mode == "a") && (flags = (Base.JL_O_WRONLY | Base.JL_O_APPEND))
     (flags == -1) && error("unknown open mode $(mode)")
 
-    file = ccall((:hdfsOpenFile, _libhdfs), Ptr{Void}, (Ptr{Void}, Ptr{Uint8}, Int32, Int32, Int16, Int32), fs.ptr, bytestring(path), int32(flags), int32(buffer_sz), int16(replication), int32(bsz))
+    file = ccall((:hdfsOpenFile, _libhdfs), Ptr{Void}, (Ptr{Void}, Ptr{Uint8}, Int32, Int32, Int16, Int32), fs.ptr, bytestring(path),
+        convert(Int32, flags),
+        convert(Int32, buffer_sz),
+        convert(Int16, replication),
+        convert(Int32, bsz))
     (C_NULL == file) && error("error opening file $(path)")
     return HdfsFile(fs, path, file)
 end
@@ -94,14 +99,14 @@ function hdfs_exists(fs::HdfsFS, path::AbstractString)
     (ret == 0)
 end
 
-hdfs_seek(file::HdfsFile, desired_pos) = ccall((:hdfsSeek, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64), file.fs.ptr, file.ptr, int64(desired_pos))
+hdfs_seek(file::HdfsFile, desired_pos) = ccall((:hdfsSeek, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Int64), file.fs.ptr, file.ptr, convert(Int64,desired_pos))
 
 hdfs_tell(file::HdfsFile) = ccall((:hdfsTell, _libhdfs), Int64, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
 
-hdfs_read(file::HdfsFile, buff::Ptr, len::Integer) = ccall((:hdfsRead, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), file.fs.ptr, file.ptr, buff, int32(len))
+hdfs_read(file::HdfsFile, buff::Ptr, len::Integer) = ccall((:hdfsRead, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), file.fs.ptr, file.ptr, buff, convert(Int32,len))
 function hdfs_read(file::HdfsFile, len::Integer)
     buff = Array(Uint8, len) 
-    (-1 == (r = hdfs_read(file, convert(Ptr{Void}, buff), len))) && error("error reading file: -1")
+    (-1 == (r = hdfs_read(file, convert(Ptr{Void}, pointer(buff)), len))) && error("error reading file: -1")
     (buff, r)
 end
 
@@ -113,9 +118,9 @@ function hdfs_pread(file::HdfsFile, position::Int64, len::Integer)
 end
 
 #can be passed an ASCIIString (length not necessary in that case)
-hdfs_write(file::HdfsFile, buff::Ptr, len::Integer) = ccall((:hdfsWrite, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), file.fs.ptr, file.ptr, buff, int32(len))
-hdfs_write(file::HdfsFile, buff::ASCIIString, len::Integer) = hdfs_write(file, convert(Ptr{Void}, buff.data), len)
-hdfs_write(file::HdfsFile, buff::ASCIIString) = hdfs_write(file, bytestring(buff), length(buff))
+hdfs_write(file::HdfsFile, buff::Ptr, len::Integer) = ccall((:hdfsWrite, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int32), file.fs.ptr, file.ptr, buff, convert(Int32,len))
+hdfs_write(file::HdfsFile, buff::ASCIIString, len::Integer) = hdfs_write(file, convert(Ptr{Void}, pointer(buff.data)), len)
+hdfs_write(file::HdfsFile, buff::ASCIIString) = hdfs_write(file, buff, length(buff))
 
 hdfs_flush(file::HdfsFile) = ccall((:hdfsFlush, _libhdfs), Int32, (Ptr{Void}, Ptr{Void}), file.fs.ptr, file.ptr)
 
@@ -130,7 +135,7 @@ hdfs_delete(fs::HdfsFS, path::AbstractString) = ccall((:hdfsDelete, _libhdfs), I
 hdfs_rename(fs::HdfsFS, old_path::AbstractString, new_path::AbstractString) = ccall((:hdfsRename, _libhdfs), Int32, (Ptr{Void}, Ptr{Uint8}, Ptr{Uint8}), fs.ptr, bytestring(old_path), bytestring(new_path))
 
 function hdfs_pwd(fs::HdfsFS, buff::Vector{Uint8}) 
-    ptr = ccall((:hdfsGetWorkingDirectory, _libhdfs), Ptr{Uint8}, (Ptr{Void}, Ptr{Uint8}, Int32), fs.ptr, buff, int32(length(buff)))
+    ptr = ccall((:hdfsGetWorkingDirectory, _libhdfs), Ptr{Uint8}, (Ptr{Void}, Ptr{Uint8}, Int32), fs.ptr, buff, convert(Int32,length(buff)))
     (C_NULL == ptr) && error("error getting working directory")
     len = ccall((:strlen, "libc"), Uint, (Ptr{Uint8},), buff)
     ASCIIString(buff[1:len])
@@ -150,7 +155,8 @@ function hdfs_list_directory(fs::HdfsFS, path::AbstractString)
     (0 == num_entries[1]) && (return [])
     (C_NULL == info_ptr) && error(string("Error listing path ", path))
 
-    ret = [HdfsFileInfo(x) for x in pointer_to_array(info_ptr, (int(num_entries[1]),))]
+    n = @compat Int(num_entries[1])
+    ret = [HdfsFileInfo(x) for x in pointer_to_array(info_ptr, (n,))]
     ccall((:hdfsFreeFileInfo, _libhdfs), Void, (Ptr{Void}, Int32), info_ptr, num_entries[1])
     ret
 end
@@ -168,7 +174,9 @@ hdfs_is_directory(fs::HdfsFS, path::AbstractString) = (hdfs_get_path_info(fs,pat
 
 function hdfs_blocks(fs::HdfsFS, path::AbstractString, start::Integer=1, len::Integer=0, as_ip::Bool=false)
     (len == 0) && (len = hdfs_get_path_info(fs, path).size)
-    c_ptr = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), int64(start), int64(len))
+    c_ptr = ccall((:hdfsGetHosts, _libhdfs), Ptr{Ptr{Ptr{Uint8}}}, (Ptr{Void}, Ptr{Uint8}, Int64, Int64), fs.ptr, bytestring(path), 
+                    convert(Int64,start), 
+                    convert(Int64,len))
     (C_NULL == c_ptr) && error("Error getting hosts for file $(path)")
 
     i = 1
@@ -274,13 +282,13 @@ readbytes(f::HdfsFile, nb::Integer) = bytestring(read(f, Array(Uint8, nb)))
 readall(f::HdfsFile) = readbytes(f, nb_available(f))
 
 function peek(f::HdfsFile)
-    eof(f) && (return uint8(-1))
+    eof(f) && (return 0xff)
     ret = read(f, Uint8)
     skip(f, -1)
     ret
 end
 
-write(f::HdfsFile, p::Ptr, nb::Integer) = write(f, p, int(nb))
+write(f::HdfsFile, p::Ptr, nb::Integer) = write(f, p, convert(Int,nb))
 write(f::HdfsFile, p::Ptr, nb::Int) = hdfs_write(f, p, nb)
 write(f::HdfsFile, x::Uint8) = write(f, Uint8[x])
 write{T}(f::HdfsFile, a::Array{T}, len) = write_sub(f, a, 1, length(a))
