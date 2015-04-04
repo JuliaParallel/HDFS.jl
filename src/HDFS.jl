@@ -31,7 +31,11 @@ function _set_debug(d)
 end
 
 const _libhdfs = "libhdfs"
+if isless(Base.VERSION, v"0.4.0-")
 dlopen(_libhdfs)
+else
+Libdl.dlopen(_libhdfs)
+end
 
 include("hdfs_types.jl")
 include("hdfs_dfs.jl")
