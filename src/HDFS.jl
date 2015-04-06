@@ -3,11 +3,11 @@ module HDFS
 using Compat
 using URIParser
 
-import  Base.pwd, Base.readdir, Base.isdir, Base.cd, Base.mkdir, Base.mv, Base.cp, Base.rm, Base.rmdir, 
-        Base.open, Base.close, Base.eof, Base.read, Base.write, Base.readbytes, Base.peek,
-        Base.readall, Base.flush, Base.nb_available, Base.position, Base.stat, Base.filesize, 
-        Base.seek, Base.seekend, Base.seekstart, Base.skip,
-        Base.isequal, Base.hash
+import  Base: pwd, readdir, isdir, cd, mkdir, mv, cp, rm, rmdir,
+        open, close, eof, read, write, readbytes, peek,
+        readall, flush, nb_available, position, stat, filesize,
+        seek, seekend, seekstart, skip,
+        isequal, ==, hash
 
 export  hdfs_connect,
         hdfs_exists, hdfs_delete, 
