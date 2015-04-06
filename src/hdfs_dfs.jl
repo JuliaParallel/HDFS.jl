@@ -220,6 +220,7 @@ hdfs_chmod(fs::HdfsFS, path::AbstractString, mode::Int16) = ccall((:hdfsChmod, _
 hdfs_utime(fs::HdfsFS, path::AbstractString, mtime::Integer, atime::Integer) = ccall((:hdfsUtime, _libhdfs), Int32, (Ptr{Void}, Ptr{UInt8}, TimeT, TimeT), fs.ptr, path, convert(TimeT, mtime), convert(TimeT, atime))
 
 isequal(u1::HdfsURL, u2::HdfsURL) = isequal(u1.url, u2.url)
+==(u1::HdfsURL, u2::HdfsURL) = (u1.url == u2.url)
 hash(u::HdfsURL) = hash(u.url)
 
 
