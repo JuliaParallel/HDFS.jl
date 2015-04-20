@@ -1,5 +1,5 @@
 
-const hdfs_fsstore = Dict{(AbstractString, Integer, AbstractString), Vector{Any}}()
+const hdfs_fsstore = Dict{@compat(Tuple{AbstractString,Integer,AbstractString}), Vector{Any}}()
 typealias IPv4v6 Union(IPv4,IPv6)
 
 function finalize_hdfs_fs(fs::HdfsFS) 
@@ -28,19 +28,24 @@ end
 
 function hdfs_connect(host::AbstractString="default", port::Integer=0, user::AbstractString="") 
     key, arr = _get_ptr_ref(host, port, user)
-    (0 != arr[1]) && return HdfsFS(host, port, user, arr[2])
+    (0 != arr[1]) && return HdfsFS(host, @compat(Int(port)), user, arr[2])
     porti32 = @compat Int32(port)
     ptr = (user == "") ? 
             ccall((:hdfsConnect, _libhdfs), Ptr{Void}, (Ptr{UInt8}, Int32), bytestring(host), porti32) : 
             ccall((:hdfsConnectAsUser, _libhdfs), Ptr{Void}, (Ptr{UInt8}, Int32, Ptr{UInt8}), bytestring(host), porti32, bytestring(user))
     (C_NULL == ptr) && error("hdfs connect failed")
     hdfs_fsstore[key] = [1, ptr]
-    HdfsFS(host, port, "", ptr)
+    HdfsFS(host, @compat(Int(port)), "", ptr)
 end
 
 function hdfs_connect(url::HdfsURL)
     uri = URI(url.url)
-    uname,_passwd = userinfo(uri.userinfo)
+    if ':' in uri.userinfo
+        uname,_passwd = userinfo(uri.userinfo)
+    else
+        uname = uri.userinfo
+        _passwd = ""
+    end
     hname = uri.host
     portnum = uri.port
     hdfs_connect(hname, portnum, (nothing == uname)?"":uname)
